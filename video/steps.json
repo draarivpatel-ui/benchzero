@@ -65,6 +65,8 @@ wait|~|~|1000|~|~
 at|168.12|~|~|~|~
 click|~|"#presets .preset:nth-child(1)"|~|~|~
 wait|~|~|700|~|~
+click|~|".tab[data-view='dso']"|~|~|~
+wait|~|~|300|~|~
 eval|~|~|~|~|"window.scrollTo(0, 0)"
 wait|~|~|1500|~|~
 
