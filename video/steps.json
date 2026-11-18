@@ -1,62 +1,70 @@
-[
-  { "do": "at", "s": 0.5 },
-  { "do": "click", "selector": "#presets .preset:nth-child(1)" },
-  { "do": "at", "s": 14 },
-  { "do": "click", "selector": "#tg-theory" },
-  { "do": "wait", "ms": 700 },
-  { "do": "click", "selector": "#tg-theory" },
-  { "do": "at", "s": 24 },
-  { "do": "click", "selector": ".tab[data-view='bode']" },
-  { "do": "wait", "ms": 1400 },
-  { "do": "at", "s": 34 },
-  { "do": "click", "selector": "#presets .preset:nth-child(2)" },
-  { "do": "wait", "ms": 800 },
-  { "do": "click", "selector": ".tab[data-view='dso']" },
-  { "do": "wait", "ms": 800 },
-  { "do": "key", "key": "a" },
-  { "do": "key", "key": "ArrowRight" },
-  { "do": "key", "key": "ArrowRight" },
-  { "do": "wait", "ms": 600 },
-  { "do": "at", "s": 44 },
-  { "do": "click", "selector": ".tab[data-view='bode']" },
-  { "do": "wait", "ms": 1400 },
-  { "do": "at", "s": 54 },
-  { "do": "click", "selector": "#presets .preset:nth-child(3)" },
-  { "do": "wait", "ms": 800 },
-  { "do": "click", "selector": "#tg-math" },
-  { "do": "wait", "ms": 1000 },
-  { "do": "at", "s": 65 },
-  { "do": "click", "selector": "#presets .preset:nth-child(4)" },
-  { "do": "wait", "ms": 800 },
-  { "do": "eval", "js": "(() => { const chip = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'R2'); if (chip) chip.click(); const inp = document.querySelector('#inspector input.si'); if (inp) { inp.value = '22k'; inp.dispatchEvent(new Event('change', { bubbles: true })); } })()" },
-  { "do": "wait", "ms": 900 },
-  { "do": "at", "s": 74 },
-  { "do": "eval", "js": "(() => { const chip = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'U1'); if (chip) chip.click(); const btn = document.querySelector('#inspector [data-act=\"math\"]'); if (btn) btn.click(); })()" },
-  { "do": "wait", "ms": 900 },
-  { "do": "click", "selector": "#btn-verify" },
-  { "do": "wait", "ms": 900 },
-  { "do": "at", "s": 83 },
-  { "do": "click", "selector": "#presets .preset:nth-child(5)" },
-  { "do": "wait", "ms": 1000 },
-  { "do": "at", "s": 92 },
-  { "do": "click", "selector": "#presets .preset:nth-child(1)" },
-  { "do": "wait", "ms": 500 },
-  { "do": "eval", "js": "(() => { const v1 = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'V1'); if (v1) v1.click(); const sel = document.querySelector('#inspector select'); if (sel) { sel.value = 'square'; sel.dispatchEvent(new Event('change', { bubbles: true })); } const freq = [...document.querySelectorAll('#inspector .field')].find(l => /Frequency/i.test(l.textContent))?.querySelector('input.si'); if (freq) { freq.value = '200'; freq.dispatchEvent(new Event('change', { bubbles: true })); } const ch1 = document.querySelector('#sel-ch1'); if (ch1) { ch1.value = 'in'; ch1.dispatchEvent(new Event('change', { bubbles: true })); } const tb = document.querySelector('#timebase'); if (tb && !tb.open) tb.open = true; const ts = document.querySelector('#in-tstop'); const dt = document.querySelector('#in-dt'); if (ts && dt) { ts.value = '20m'; ts.dispatchEvent(new Event('change', { bubbles: true })); dt.value = '2u'; dt.dispatchEvent(new Event('change', { bubbles: true })); } })()" },
-  { "do": "wait", "ms": 500 },
-  { "do": "click", "selector": ".tab[data-view='fft']" },
-  { "do": "wait", "ms": 1500 },
-  { "do": "at", "s": 108 },
-  { "do": "click", "selector": "#btn-acoustic" },
-  { "do": "wait", "ms": 2200 },
-  { "do": "at", "s": 120 },
-  { "do": "click", "selector": "#btn-sonify" },
-  { "do": "wait", "ms": 1800 },
-  { "do": "at", "s": 130 },
-  { "do": "click", "selector": "#btn-share" },
-  { "do": "wait", "ms": 1000 },
-  { "do": "at", "s": 140 },
-  { "do": "click", "selector": "#presets .preset:nth-child(1)" },
-  { "do": "wait", "ms": 700 },
-  { "do": "eval", "js": "window.scrollTo(0, 0)" },
-  { "do": "wait", "ms": 1500 }
-]
+```gcf-generic
+GCF profile=generic
+## [60]{do,s,selector,ms,key,js}
+at|0.6|~|~|~|~
+click|~|"#presets .preset:nth-child(1)"|~|~|~
+at|26.19|~|~|~|~
+click|~|"#tg-theory"|~|~|~
+wait|~|~|700|~|~
+click|~|"#tg-theory"|~|~|~
+at|43.87|~|~|~|~
+click|~|".tab[data-view='bode']"|~|~|~
+wait|~|~|1400|~|~
+at|56.5|~|~|~|~
+click|~|"#presets .preset:nth-child(2)"|~|~|~
+wait|~|~|800|~|~
+click|~|".tab[data-view='dso']"|~|~|~
+wait|~|~|800|~|~
+at|68.44|~|~|~|~
+click|~|".tab[data-view='bode']"|~|~|~
+wait|~|~|1400|~|~
+at|79.22|~|~|~|~
+click|~|".tab[data-view='dso']"|~|~|~
+wait|~|~|600|~|~
+key|~|~|~|a|~
+key|~|~|~|ArrowRight|~
+key|~|~|~|ArrowRight|~
+wait|~|~|600|~|~
+at|83.97|~|~|~|~
+click|~|"#presets .preset:nth-child(3)"|~|~|~
+wait|~|~|800|~|~
+at|96.05|~|~|~|~
+click|~|"#tg-math"|~|~|~
+wait|~|~|1000|~|~
+at|98.47|~|~|~|~
+click|~|"#presets .preset:nth-child(4)"|~|~|~
+wait|~|~|800|~|~
+at|101.25|~|~|~|~
+eval|~|~|~|~|"(() => { const chip = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'R2'); if (chip) chip.click(); const inp = document.querySelector('#inspector input.si'); if (inp) { inp.value = '22k'; inp.dispatchEvent(new Event('change', { bubbles: true })); } })()"
+wait|~|~|900|~|~
+at|109.67|~|~|~|~
+eval|~|~|~|~|"(() => { const chip = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'U1'); if (chip) chip.click(); const btn = document.querySelector('#inspector [data-act=\"math\"]'); if (btn) btn.click(); })()"
+wait|~|~|900|~|~
+click|~|"#btn-verify"|~|~|~
+wait|~|~|900|~|~
+at|116.25|~|~|~|~
+click|~|"#presets .preset:nth-child(5)"|~|~|~
+wait|~|~|1000|~|~
+at|124.76|~|~|~|~
+click|~|"#presets .preset:nth-child(1)"|~|~|~
+wait|~|~|500|~|~
+eval|~|~|~|~|"(() => { const v1 = [...document.querySelectorAll('#parts .part-chip')].find(b => b.textContent.trim() === 'V1'); if (v1) v1.click(); const sel = document.querySelector('#inspector select'); if (sel) { sel.value = 'square'; sel.dispatchEvent(new Event('change', { bubbles: true })); } const freq = [...document.querySelectorAll('#inspector .field')].find(l => /Frequency/i.test(l.textContent))?.querySelector('input.si'); if (freq) { freq.value = '200'; freq.dispatchEvent(new Event('change', { bubbles: true })); } const ch1 = document.querySelector('#sel-ch1'); if (ch1) { ch1.value = 'in'; ch1.dispatchEvent(new Event('change', { bubbles: true })); } const tb = document.querySelector('#timebase'); if (tb && !tb.open) tb.open = true; const ts = document.querySelector('#in-tstop'); const dt = document.querySelector('#in-dt'); if (ts && dt) { ts.value = '20m'; ts.dispatchEvent(new Event('change', { bubbles: true })); dt.value = '2u'; dt.dispatchEvent(new Event('change', { bubbles: true })); } })()"
+wait|~|~|500|~|~
+at|127.58|~|~|~|~
+click|~|".tab[data-view='fft']"|~|~|~
+wait|~|~|1500|~|~
+at|141.39|~|~|~|~
+click|~|"#btn-acoustic"|~|~|~
+wait|~|~|2200|~|~
+at|152.35|~|~|~|~
+click|~|"#btn-sonify"|~|~|~
+wait|~|~|1800|~|~
+at|159.82|~|~|~|~
+click|~|"#btn-share"|~|~|~
+wait|~|~|1000|~|~
+at|168.12|~|~|~|~
+click|~|"#presets .preset:nth-child(1)"|~|~|~
+wait|~|~|700|~|~
+eval|~|~|~|~|"window.scrollTo(0, 0)"
+wait|~|~|1500|~|~
+
