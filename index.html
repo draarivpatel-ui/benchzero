@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BenchZero</title>
+  <meta name="description" content="A browser circuit bench with a SPICE-style solver, a four-view oscilloscope and a live check against closed-form physics. Runs offline with no install.">
+  <meta name="theme-color" content="#0b0f14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preload" href="fonts/benchzero-segment.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#scope">Skip to the oscilloscope</a>
+  <header class="bar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1.5" y="1.5" width="29" height="29" rx="7"/><path d="M5 20 h5 l3 -9 l4 14 l3 -9 h7"/></svg>
+      <h1 class="wordmark">BenchZero</h1>
+    </div>
+    <nav class="presets" aria-label="Guided labs" id="presets"></nav>
+    <div class="actions">
+      <button type="button" id="btn-run" class="btn" aria-pressed="true" title="Run or pause the sweep (Space)"><span class="ico" aria-hidden="true"></span><span class="lbl">Pause</span></button>
+      <button type="button" id="btn-sonify" class="btn" aria-pressed="false" title="Hear CH1 as pitch (S)">Sonify</button>
+      <button type="button" id="btn-acoustic" class="btn" aria-pressed="false" title="Speaker to microphone response">Acoustic Lab</button>
+      <button type="button" id="btn-share" class="btn btn-accent" title="Copy a link that rebuilds this exact lab">Copy Lab Link</button>
+      <button type="button" id="btn-help" class="btn btn-icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">?</button>
+    </div>
+  </header>
+
+  <main class="bench">
+    <section class="panel schem" aria-labelledby="h-schem">
+      <div class="panel-head">
+        <h2 id="h-schem">Schematic</h2>
+        <div class="add" role="group" aria-label="Add a part">
+          <button type="button" class="chip" data-add="R">+ R</button>
+          <button type="button" class="chip" data-add="C">+ C</button>
+          <button type="button" class="chip" data-add="L">+ L</button>
+          <button type="button" class="chip" data-add="D">+ D</button>
+          <button type="button" class="chip" data-add="V">+ V</button>
+          <button type="button" class="chip" data-add="OPAMP">+ Op-amp</button>
+        </div>
+      </div>
+      <div class="canvas-wrap schem-wrap">
+        <canvas id="schematic" tabindex="0" aria-label="Schematic. Arrow keys pick a part, Enter edits its value, N cycles nodes, 1 or 2 on a node sets a probe." aria-describedby="schem-desc"></canvas>
+      </div>
+      <p id="schem-desc" class="sr-only"></p>
+      <div class="parts" id="parts" role="listbox" aria-label="Parts in this circuit"></div>
+    </section>
+
+    <section class="panel scopep" aria-labelledby="h-scope">
+      <h2 id="h-scope" class="sr-only">Oscilloscope</h2>
+      <div class="panel-head scope-head">
+        <div class="tabs" role="tablist" aria-label="Scope view">
+          <button type="button" role="tab" class="tab" data-view="dso" aria-selected="true" aria-controls="scope">Time</button>
+          <button type="button" role="tab" class="tab" data-view="fft" aria-selected="false" aria-controls="scope">Spectrum</button>
+          <button type="button" role="tab" class="tab" data-view="bode" aria-selected="false" aria-controls="scope">Bode</button>
+          <button type="button" role="tab" class="tab" data-view="acoustic" aria-selected="false" aria-controls="scope">Acoustic</button>
+        </div>
+        <div class="chans">
+          <label class="ch ch1"><span>CH1</span><select id="sel-ch1" aria-label="CH1 probe node"></select></label>
+          <label class="ch ch2"><span>CH2</span><select id="sel-ch2" aria-label="CH2 probe node"></select></label>
+          <button type="button" class="toggle t-theory" id="tg-theory" aria-pressed="true" title="Theory overlay (T)">Theory</button>
+          <button type="button" class="toggle t-math" id="tg-math" aria-pressed="false" title="Math V x I power trace (M)">Math V&#x00d7;I</button>
+        </div>
+      </div>
+      <div class="canvas-wrap scope-wrap">
+        <canvas id="scope" tabindex="0" aria-label="Oscilloscope display. Drag the dashed cursors, or press A and B with arrow keys to move them." role="img"></canvas>
+      </div>
+      <div class="telemetry" aria-label="Measurements">
+        <div class="tm"><span class="k">Vpp</span><span class="v" id="m-vpp">--</span></div>
+        <div class="tm"><span class="k">Vrms</span><span class="v" id="m-vrms">--</span></div>
+        <div class="tm"><span class="k">Freq</span><span class="v" id="m-freq">--</span></div>
+        <div class="tm"><span class="k" id="m-f0k">f0 / fc</span><span class="v" id="m-f0">--</span></div>
+        <div class="tm"><span class="k">Theory RMSE</span><span class="v" id="m-rmse">--</span></div>
+        <div class="tm"><span class="k">Solve</span><span class="v" id="m-ms">--</span></div>
+      </div>
+    </section>
+
+    <section class="panel insp" aria-labelledby="h-insp">
+      <div class="panel-head"><h2 id="h-insp">Inspector</h2></div>
+      <div id="inspector" class="insp-body"></div>
+      <details class="timebase" id="timebase">
+        <summary>Timebase and solver</summary>
+        <div class="grid2">
+          <label>Window<input id="in-tstop" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>
+          <label>Step<input id="in-dt" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>
+          <label>Method<select id="in-method"><option value="trap">Trapezoidal</option><option value="be">Backward Euler</option></select></label>
+          <label>Math part<select id="in-math"></select></label>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel verify" aria-labelledby="h-verify">
+      <div class="panel-head">
+        <h2 id="h-verify">Verify Against Theory</h2>
+        <button type="button" class="btn btn-small" id="btn-verify">Verify now</button>
+      </div>
+      <div id="verify-body" class="verify-body"></div>
+    </section>
+
+    <section class="panel guide" aria-labelledby="h-guide">
+      <div class="panel-head"><h2 id="h-guide">Lab Challenges</h2><span class="score" id="score"></span></div>
+      <ol id="challenges" class="challenges"></ol>
+    </section>
+  </main>
+
+  <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <dialog id="help" aria-labelledby="h-help">
+    <h2 id="h-help">Keyboard</h2>
+    <dl class="keys">
+      <dt><kbd>1</kbd> to <kbd>5</kbd></dt><dd>Load a guided lab</dd>
+      <dt><kbd>Space</kbd></dt><dd>Run or pause the sweep</dd>
+      <dt><kbd>S</kbd></dt><dd>Sonify CH1 (220 Hz low, 880 Hz high)</dd>
+      <dt><kbd>T</kbd></dt><dd>Theory overlay on or off</dd>
+      <dt><kbd>M</kbd></dt><dd>Math V&#x00d7;I power trace</dd>
+      <dt><kbd>V</kbd></dt><dd>Next scope view</dd>
+      <dt><kbd>R</kbd></dt><dd>Reset the current lab</dd>
+      <dt><kbd>A</kbd> / <kbd>B</kbd> + arrows</dt><dd>Move a time cursor</dd>
+      <dt>Schematic <kbd>&#x2190;</kbd> <kbd>&#x2192;</kbd></dt><dd>Pick a part</dd>
+      <dt>Schematic <kbd>&#x2191;</kbd> <kbd>&#x2193;</kbd></dt><dd>Nudge its value</dd>
+      <dt>Schematic <kbd>N</kbd></dt><dd>Cycle nodes, then <kbd>1</kbd> or <kbd>2</kbd> probes it</dd>
+      <dt><kbd>Enter</kbd></dt><dd>Edit the selected value</dd>
+      <dt><kbd>Delete</kbd></dt><dd>Remove the selected part</dd>
+      <dt>Click a node</dt><dd>CH1 probe (Shift-click for CH2)</dd>
+    </dl>
+    <form method="dialog"><button class="btn">Close</button></form>
+  </dialog>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

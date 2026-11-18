@@ -1,0 +1,8 @@
+{
+  "name": "benchzero",
+  "private": true,
+  "type": "module",
+  "description": "Browser circuit lab with a SPICE-style solver checked against closed-form physics",
+  "license": "MIT",
+  "scripts": { "test": "node --test tests/" }
+}
