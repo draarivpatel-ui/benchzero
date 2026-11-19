@@ -2,3 +2,5 @@
 node_modules/
 *.log
 .scratch/
+video/demo.mp4
+video/narration.wav
