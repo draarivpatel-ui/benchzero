@@ -8,7 +8,7 @@ export const SONIFY_LOW = 220;
 export const SONIFY_HIGH = 880;
 
 /** Map a value in [lo, hi] to 220..880 Hz on a log (musical) scale: two octaves. */
-export function pitchFor(v, lo, hi) {
+function pitchFor(v, lo, hi) {
   if (!(hi > lo)) return Math.sqrt(SONIFY_LOW * SONIFY_HIGH);
   const u = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
   return SONIFY_LOW * (SONIFY_HIGH / SONIFY_LOW) ** u;

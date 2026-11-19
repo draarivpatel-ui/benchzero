@@ -24,7 +24,7 @@ const MONO_SM = '500 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const UNITS = { R: 'Ω', C: 'F', L: 'H' };
 
 /** Terminal grid positions of a part, in node order. */
-export function terminals(p) {
+function terminals(p) {
   const [x, y, r] = p.at && p.at.length === 3 ? p.at : [0, 0, 0];
   if (p.type === 'OPAMP') {
     const s = r === 2 ? -1 : 1;

@@ -4,7 +4,7 @@
 
 import { WAVE_KINDS } from './waves.js';
 
-export const CODEC_VERSION = 1;
+const CODEC_VERSION = 1;
 const TYPES = ['R', 'C', 'L', 'V', 'D', 'OPAMP'];
 const PINS = { R: 2, C: 2, L: 2, V: 2, D: 2, OPAMP: 3 };
 const LABS = ['rc', 'rlc', 'rect', 'inv', 'div', ''];
@@ -54,7 +54,7 @@ function defaultLayout(i) {
 }
 
 /** Circuit -> compact plain object (stable key and part order). */
-export function pack(c) {
+function pack(c) {
   const parts = c.parts.map((p, i) => {
     let param;
     if (p.type === 'R' || p.type === 'C' || p.type === 'L') param = num(p.value);
@@ -76,7 +76,7 @@ export function pack(c) {
 }
 
 /** Compact object -> validated circuit. Throws Error with a readable message on any problem. */
-export function unpack(o) {
+function unpack(o) {
   if (!o || typeof o !== 'object' || o.v !== CODEC_VERSION) throw new Error('Unsupported lab link version.');
   if (!LABS.includes(o.l)) throw new Error('Unknown lab.');
   if (!Array.isArray(o.p) || o.p.length < 1 || o.p.length > MAX_PARTS) throw new Error('Bad parts list.');

@@ -5,10 +5,10 @@
 import { normalizeWave, waveValue, waveDC } from './waves.js';
 
 const TAU = 2 * Math.PI;
-export const VT = 0.02585;
+const VT = 0.02585;
 
 /** Required topology for each lab: [id, type, nodes]. Values may change freely. */
-export const LAB_TOPOLOGY = {
+const LAB_TOPOLOGY = {
   rc: [['V1', 'V', ['in', '0']], ['R1', 'R', ['in', 'out']], ['C1', 'C', ['out', '0']]],
   rlc: [['V1', 'V', ['in', '0']], ['R1', 'R', ['in', 'a']], ['L1', 'L', ['a', 'out']], ['C1', 'C', ['out', '0']]],
   rect: [['V1', 'V', ['in', '0']], ['D1', 'D', ['in', 'out']], ['C1', 'C', ['out', '0']], ['RL', 'R', ['out', '0']]],
@@ -222,7 +222,7 @@ function rectCurve(d, C, R, w, tArr) {
 }
 
 /** Peak output and Shockley drop for a source peak Vs and load R (fixed point). */
-export function rectifierPeak(vsPeak, R, d) {
+function rectifierPeak(vsPeak, R, d) {
   let vo = vsPeak - 0.7;
   for (let i = 0; i < 30; i++) vo = vsPeak - d.n * VT * Math.log(1 + Math.max(vo, 1e-6) / R / d.is);
   return { vout: vo, vf: vsPeak - vo };
