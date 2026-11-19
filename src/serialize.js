@@ -10,10 +10,24 @@ const PINS = { R: 2, C: 2, L: 2, V: 2, D: 2, OPAMP: 3 };
 const LABS = ['rc', 'rlc', 'rect', 'inv', 'div', ''];
 const NODE_RE = /^[A-Za-z0-9_]{1,12}$/;
 const ID_RE = /^[A-Z][A-Za-z0-9]{0,7}$/;
+// Names that collide with inherited properties of ordinary JavaScript objects.
+const RESERVED_NAMES = new Set([
+  '__proto__', 'constructor', 'prototype', 'toString', 'valueOf',
+  'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString',
+]);
 const MAX_PARTS = 40;
 const MAX_CODE = 4096;
+const WORLD_LIMIT = 2000; // schematic grid coordinates must stay inside this range
 
-const num = (v) => +Number(v).toPrecision(6);
+// Full JSON precision: a 1234.56789 Ohm resistor round-trips as 1234.56789 Ohm.
+const num = (v) => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const isNode = (v) => typeof v === 'string' && NODE_RE.test(v) && !RESERVED_NAMES.has(v);
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const inWorld = (v) => Number.isInteger(v) && Math.abs(v) <= WORLD_LIMIT;
 
 function waveToArr(w = {}) {
   return [
@@ -24,7 +38,7 @@ function waveToArr(w = {}) {
 }
 
 function arrToWave(a) {
-  if (!Array.isArray(a) || a.length !== 9 || !a.every(Number.isFinite)) throw new Error('bad wave');
+  if (!Array.isArray(a) || a.length !== 9 || !a.every(isNum)) throw new Error('bad wave');
   const kind = WAVE_KINDS[a[0]];
   if (!kind) throw new Error('bad wave kind');
   const [, amp, offset, freq, duty, delay, phase, f2, sweep] = a;
@@ -34,15 +48,20 @@ function arrToWave(a) {
   return { kind, amp, offset, freq, duty, delay, phase, f2, sweep };
 }
 
+/** A deterministic on-grid layout for links that carry no explicit positions. */
+function defaultLayout(i) {
+  return [(i % 6) * 3 + 1, Math.floor(i / 6) * 3 + 1, 0];
+}
+
 /** Circuit -> compact plain object (stable key and part order). */
 export function pack(c) {
-  const parts = c.parts.map((p) => {
+  const parts = c.parts.map((p, i) => {
     let param;
     if (p.type === 'R' || p.type === 'C' || p.type === 'L') param = num(p.value);
     else if (p.type === 'V') param = waveToArr(p.wave);
     else if (p.type === 'D') param = p.model === 'led' ? 'led' : 'si';
     else if (p.type === 'OPAMP') param = [num(p.gain ?? 1e5), num(p.rail ?? 12)];
-    const at = Array.isArray(p.at) ? p.at.map((v) => Math.round(v)) : 0;
+    const at = Array.isArray(p.at) ? p.at.map((v) => Math.round(v)) : defaultLayout(i);
     return [p.type, p.id, p.nodes.join(','), param, at];
   });
   const out = { v: CODEC_VERSION, l: c.lab || '', p: parts };
@@ -62,59 +81,64 @@ export function unpack(o) {
   if (!LABS.includes(o.l)) throw new Error('Unknown lab.');
   if (!Array.isArray(o.p) || o.p.length < 1 || o.p.length > MAX_PARTS) throw new Error('Bad parts list.');
   const ids = new Set();
-  const parts = o.p.map((e) => {
+  const parts = o.p.map((e, i) => {
     if (!Array.isArray(e) || e.length !== 5) throw new Error('Bad part entry.');
     const [type, id, nodesStr, param, at] = e;
     if (!TYPES.includes(type)) throw new Error(`Unknown part type ${type}.`);
     if (typeof id !== 'string' || !ID_RE.test(id) || ids.has(id)) throw new Error(`Bad part id ${id}.`);
     ids.add(id);
     const nodes = typeof nodesStr === 'string' ? nodesStr.split(',') : [];
-    if (nodes.length !== PINS[type] || !nodes.every((n) => NODE_RE.test(n))) throw new Error(`Bad nodes on ${id}.`);
+    if (nodes.length !== PINS[type] || !nodes.every(isNode)) throw new Error(`Bad nodes on ${id}.`);
     const p = { id, type, nodes };
     if (type === 'R' || type === 'C' || type === 'L') {
-      if (!(Number.isFinite(param) && param > 0 && param < 1e12)) throw new Error(`Bad value on ${id}.`);
+      if (!(isNum(param) && param > 0 && param < 1e12)) throw new Error(`Bad value on ${id}.`);
       p.value = param;
     } else if (type === 'V') p.wave = arrToWave(param);
     else if (type === 'D') {
       if (param !== 'si' && param !== 'led') throw new Error(`Bad diode model on ${id}.`);
       p.model = param;
     } else if (type === 'OPAMP') {
-      if (!Array.isArray(param) || param.length !== 2 || !(param[0] > 1 && param[0] <= 1e9) || !(param[1] > 0 && param[1] <= 100)) {
+      if (!Array.isArray(param) || param.length !== 2 || !isNum(param[0]) || !isNum(param[1])
+        || !(param[0] > 1 && param[0] <= 1e9) || !(param[1] > 0 && param[1] <= 100)) {
         throw new Error(`Bad op-amp settings on ${id}.`);
       }
       p.gain = param[0];
       p.rail = param[1];
     }
-    if (at !== 0) {
-      if (!Array.isArray(at) || at.length !== 3 || !at.every((v) => Number.isInteger(v) && Math.abs(v) <= 200) || at[2] < 0 || at[2] > 3) {
+    // A missing layout is normalized, never left undefined: dragging needs p.at.
+    if (at === 0) p.at = defaultLayout(i);
+    else {
+      if (!Array.isArray(at) || at.length !== 3 || !at.every(inWorld) || at[2] < 0 || at[2] > 3) {
         throw new Error(`Bad layout on ${id}.`);
       }
-      p.at = at;
+      p.at = at.slice();
     }
     return p;
   });
   const c = { lab: o.l, parts };
   if (o.n !== undefined) {
     if (!Array.isArray(o.n) || o.n.length > 60) throw new Error('Bad node positions.');
-    c.nodePos = {};
+    c.nodePos = Object.create(null);
     for (const e of o.n) {
-      if (!Array.isArray(e) || e.length !== 3 || !NODE_RE.test(e[0]) || !Number.isInteger(e[1]) || !Number.isInteger(e[2])) {
+      if (!Array.isArray(e) || e.length !== 3 || !isNode(e[0]) || !inWorld(e[1]) || !inWorld(e[2])) {
         throw new Error('Bad node position.');
       }
       c.nodePos[e[0]] = [e[1], e[2]];
     }
   }
-  if (!Array.isArray(o.pr) || o.pr.length !== 2 || !o.pr.every((n) => n === '' || NODE_RE.test(n))) throw new Error('Bad probes.');
+  if (!Array.isArray(o.pr) || o.pr.length !== 2 || !o.pr.every((n) => n === '' || isNode(n))) throw new Error('Bad probes.');
   c.probes = { ch1: o.pr[0], ch2: o.pr[1] };
-  if (!Array.isArray(o.s) || o.s.length < 2 || o.s.length > 3 || !(o.s[0] > 0 && o.s[0] <= 100) || !(o.s[1] > 0 && o.s[1] < o.s[0])) {
+  if (!Array.isArray(o.s) || o.s.length < 2 || o.s.length > 3
+    || !o.s.every(isNum) || !(o.s[0] > 0 && o.s[0] <= 100) || !(o.s[1] > 0 && o.s[1] < o.s[0])) {
     throw new Error('Bad simulation window.');
   }
   if (o.s.length === 3 && o.s[2] !== 1) throw new Error('Bad solver method.');
   c.sim = { tstop: o.s[0], dt: o.s[1] };
   if (o.s[2] === 1) c.sim.method = 'be';
   if (o.a === 0) c.ac = null;
-  else if (Array.isArray(o.a) && o.a.length === 2 && o.a[0] > 0 && o.a[1] > o.a[0] && o.a[1] <= 1e9) c.ac = { fstart: o.a[0], fstop: o.a[1] };
-  else throw new Error('Bad AC sweep.');
+  else if (Array.isArray(o.a) && o.a.length === 2 && o.a.every(isNum) && o.a[0] > 0 && o.a[1] > o.a[0] && o.a[1] <= 1e9) {
+    c.ac = { fstart: o.a[0], fstop: o.a[1] };
+  } else throw new Error('Bad AC sweep.');
   if (typeof o.m !== 'string' || (o.m && !ids.has(o.m))) throw new Error('Bad math part.');
   c.math = o.m;
   return c;
@@ -155,6 +179,9 @@ export function decodeLab(code) {
 
 /** Read a lab from a location.hash string such as "#lab=...". */
 export function labFromHash(hash) {
-  const m = /^#?lab=([A-Za-z0-9_-]+)$/.exec(hash || '');
-  return m ? decodeLab(m[1]) : null;
+  const s = typeof hash === 'string' ? hash : '';
+  if (!/^#?lab=/.test(s)) return null;
+  const m = /^#?lab=([A-Za-z0-9_-]+)$/.exec(s);
+  if (!m) return { ok: false, error: 'Malformed lab link. The hash after #lab= is incomplete or invalid.' };
+  return decodeLab(m[1]);
 }

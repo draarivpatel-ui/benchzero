@@ -1,0 +1,13 @@
+Most students meet circuits as equations on paper. A real bench makes the physics tangible, but a scope, a function generator, and a parts kit are expensive, and not every classroom has one. BenchZero puts that bench in a browser tab, with no install or account, and it works offline.
+
+Lab one is an RC low-pass. I apply a five volt step. The cyan trace comes from the MNA solver; the green overlay is the textbook solution, computed by a module that never imports the solver. The panel reports 0.584 microvolts RMSE, 0.0000118 percent of full scale. In the Bode view, at 159.1549 hertz, it reads minus 3.01030 decibels, and the phase at that exact cutoff is minus 45.0 degrees.
+
+Lab two is a series RLC. I tune R, L, and C with SI text or sliders. The step response rings, and the theory overlay tracks it to 66.1 microvolts RMSE. The Bode plot finds the capacitor voltage peak at 1575.554 hertz and 14.0230 decibels, matching the closed form. I drop cursors on the ring to measure its period directly.
+
+Lab three is a half-wave rectifier. This model is approximate and says so: 55.6 millivolts RMSE, 0.593 percent, a 0.726 volt diode drop. Math shows the load power. Lab four is an inverting amplifier. I edit the feedback resistor to minus 22, and the gain challenge confirms it against the measured AC response. Switching Math to the op-amp output plots its delivered power, about 2.5 milliwatts. Lab five is a loaded divider, exact to 8.9e-16 volts, with Thevenin voltage and resistance together.
+
+Now a 200 hertz square wave. The spectrum marks harmonics two through ten and reports 42.879 percent THD, exactly the Fourier series prediction. A clean amplifier measures 1.8e-4 percent.
+
+The acoustic lab sweeps 100 hertz to 10 kilohertz. With no microphone permission it runs the simulated loopback, labelled SIMULATED. Press S, and channel one becomes pitch from 220 to 880 hertz over three seconds.
+
+One click copies a share link with full precision; the byte count appears, and the link rebuilds the exact circuit. It all runs offline after first load.

@@ -331,21 +331,36 @@ export class Scope {
       ctx.beginPath(); ctx.moveTo(x, P.y); ctx.lineTo(x, P.y + P.h); ctx.stroke();
     }
     this._cursors();
-    // Scale legend.
+    // Scale legend. Wrap onto extra rows so every channel, power scale, timebase and
+    // theory label stays readable inside the canvas at phone widths (including Math on).
     ctx.font = MONO;
     ctx.textBaseline = 'middle';
-    const y = this.H - 14;
-    let x = P.x;
-    const put = (txt, color) => { ctx.fillStyle = color; ctx.fillText(txt, x, y); x += ctx.measureText(txt).width + 16; };
     ctx.textAlign = 'left';
+    const gap = 12;
+    const items = [];
     for (const t of traces) {
       if (t.key === 'theory') continue;
       const unit = t.key === 'math' ? 'W' : 'V';
-      const label = t.key === 'math' ? `M P(${t.node})` : `${t.key.toUpperCase()} ${t.node}`;
-      put(`${label} ${formatSI(t.scale.per, unit)}/div`, t.color);
+      const isOp = this.result && this.result.math && this.result.math.type === 'OPAMP';
+      const label = t.key === 'math' ? `M ${isOp ? 'Pout' : 'P'}(${t.node})` : `${t.key.toUpperCase()} ${t.node}`;
+      items.push({ text: `${label} ${formatSI(t.scale.per, unit)}/div`, color: t.color });
     }
-    put(`${formatSI(tr.tstop / DIV_X, 's')}/div`, C.text);
-    if (traces.some((t) => t.key === 'theory')) put('theory', C.theory);
+    items.push({ text: `${formatSI(tr.tstop / DIV_X, 's')}/div`, color: C.text });
+    if (traces.some((t) => t.key === 'theory')) items.push({ text: 'theory', color: C.theory });
+    // Reserve up to three rows in the bottom margin area, drawn over the lower graticule.
+    const lineH = 13;
+    const rows = Math.min(3, Math.max(1, Math.ceil(items.reduce((n, it) => n + ctx.measureText(it.text).width + gap, 0) / Math.max(1, P.w))));
+    let row = 0;
+    let x = P.x;
+    let y = this.H - 8 - (rows - 1) * lineH;
+    for (const it of items) {
+      const w = ctx.measureText(it.text).width;
+      if (x > P.x && x + w > P.x + P.w) { row++; x = P.x; y += lineH; }
+      if (row >= rows) row = rows - 1;
+      ctx.fillStyle = it.color;
+      ctx.fillText(it.text, x, Math.min(this.H - 7, y));
+      x += w + gap;
+    }
   }
 
   _cursors() {
@@ -446,7 +461,7 @@ export class Scope {
     plotSpec(ch1, C.math, 1);
     // Harmonic markers.
     const th = r.chans.ch1.thd;
-    if (th && th.harmonics) {
+    if (th && Array.isArray(th.harmonics) && th.harmonics.length > 0) {
       ctx.font = '600 10px ui-monospace, Menlo, monospace';
       ctx.textAlign = 'center';
       for (const h of th.harmonics.slice(0, 8)) {
@@ -459,9 +474,17 @@ export class Scope {
         ctx.beginPath(); ctx.moveTo(x - 4, y - 8); ctx.lineTo(x + 4, y - 8); ctx.lineTo(x, y - 2); ctx.fill();
         ctx.fillText(`H${h.n}`, x, y - 15);
       }
-      this._tag([`f1 ${formatSI(th.harmonics[0].freq, 'Hz', 4)}`, `THD ${th.percent < 0.01 ? th.percent.toExponential(1) : th.percent.toFixed(2)} %`, ch1.coherent ? 'whole-cycle FFT' : 'Hann window'], C.math, true);
+      const range = th.harmonics.length > 1 ? `H2-H${th.harmonics[th.harmonics.length - 1].n}` : 'H2-H10';
+      const pct = Number.isFinite(th.percent) ? (th.percent < 0.01 ? th.percent.toExponential(1) : th.percent.toFixed(2)) : null;
+      const lines = [`f1 ${formatSI(th.harmonics[0].freq, 'Hz', 4)}`];
+      if (pct !== null) lines.push(`THD ${pct} % (${range})`);
+      else lines.push(`THD ${th.reason || 'N/A'} (${range})`);
+      lines.push(ch1.coherent ? 'whole-cycle FFT' : 'Hann window');
+      this._tag(lines, C.math, true);
     } else {
-      this._tag([`peak ${formatSI(ch1.peak.freq, 'Hz', 4)}`, 'THD needs a periodic signal'], C.math, true);
+      const reason = r.chans.ch1.thd && r.chans.ch1.thd.reason;
+      const peak = Number.isFinite(ch1.peak.freq) ? formatSI(ch1.peak.freq, 'Hz', 4) : 'none';
+      this._tag([`peak ${peak}`, reason ? `THD ${reason}` : 'THD needs a periodic signal'], C.math, true);
     }
   }
 
@@ -472,7 +495,7 @@ export class Scope {
     const ac = r && r.ac;
     if (!ac || !ac.ok) {
       this._graticule();
-      this._banner(r && r.ac && r.ac.error ? r.ac.error.message : 'The AC sweep is off for this lab. A switching or DC circuit has no single small-signal response.');
+      this._banner(r && r.ac && r.ac.error ? r.ac.error.message : 'The AC sweep is off for this lab. Enable an AC frequency range in the circuit to activate the small-signal sweep; the theory panel shows the flat response where one applies.');
       return;
     }
     const f0 = ac.freqs[0];
@@ -526,8 +549,9 @@ export class Scope {
       ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(P.x, y); ctx.lineTo(P.x + P.w, y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = C.warn; ctx.textAlign = 'right';
-      ctx.fillText('-3 dB', P.x + P.w - 4, y - 6);
+      ctx.fillStyle = C.warn; ctx.textAlign = 'left';
+      // Keep the -3 dB label away from the right-hand marker/tag region.
+      ctx.fillText('-3 dB', P.x + 4, y - 6);
     }
     const mark = (f, label) => {
       if (!Number.isFinite(f) || f < f0 || f > f1) return;
@@ -546,8 +570,11 @@ export class Scope {
       lines.push(`peak ${ref.peakDb.toFixed(2)} dB`);
     } else if (Number.isFinite(ref.f3dB)) {
       mark(ref.f3dB, `fc ${formatSI(ref.f3dB, 'Hz', 4)}`);
-      const k = ac.freqs.findIndex((f) => f >= ref.f3dB);
-      if (k > 0) lines.push(`phase at fc ${ac.phase[k].toFixed(1)}°`);
+      const ph = Number.isFinite(ref.phaseAtFc) ? ref.phaseAtFc : (() => {
+        const k = ac.freqs.findIndex((f) => f >= ref.f3dB);
+        return k > 0 ? ac.phase[k] : NaN;
+      })();
+      if (Number.isFinite(ph)) lines.push(`phase at fc ${ph.toFixed(1)}°`);
     } else {
       lines.push(`gain ${ac.mag[Math.floor(n / 2)].toFixed(2)} dB`);
       lines.push(`phase ${ac.phase[Math.floor(n / 2)].toFixed(1)}°`);
@@ -604,12 +631,13 @@ export class Scope {
     ctx.font = MONO;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    // Endpoint labels keep the bottom corners; the loopback label goes in the tag so
+    // they never run together on a narrow phone canvas.
     ctx.fillText('50 Hz', P.x + 4, this.H - 14);
     ctx.textAlign = 'right';
     ctx.fillText('12 kHz', P.x + P.w - 4, this.H - 14);
-    ctx.textAlign = 'center';
-    ctx.fillText(a.simulated ? 'SIMULATED loopback (no microphone)' : 'Live microphone', P.x + P.w / 2, this.H - 14);
-    const lines = [a.status || ''];
+    const lines = [a.simulated ? 'SIMULATED loopback' : 'Live microphone'];
+    if (a.status) lines.push(a.status);
     if (a.tone) lines.push(`tone ${formatSI(a.tone, 'Hz', 4)}`);
     this._tag(lines.filter(Boolean), a.simulated ? C.warn : C.theory);
   }

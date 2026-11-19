@@ -17,7 +17,7 @@ Most students meet circuits as equations on paper. A real bench (function genera
 - **Interactive schematic.** IEEE-style symbols, live node-voltage badges, animated current flow, drag to move parts, click a node to probe it, add or delete parts, rewire any terminal, tune values with log sliders or SI text (`1k`, `100n`, `4.7m`, `10u`).
 - **Sonification.** Press `S` to hear the CH1 trace as pitch (220 Hz at its lowest voltage, 880 Hz at its highest, panned left to right over 3 seconds), so RC charging, RLC ringing and diode clipping can be heard as well as seen.
 - **Acoustic lab.** A stepped sine sweep from 100 Hz to 10 kHz played through the speakers and measured with the microphone. If there is no microphone or permission is refused, it runs a silent simulated loopback and every screen says SIMULATED.
-- **Share links.** One click copies a URL whose `#lab=` hash rebuilds the exact circuit, layout, probes and timebase. All five labs encode in under 400 bytes, and decoding validates every field.
+- **Share links.** One click copies a URL whose `#lab=` hash rebuilds the circuit, layout, probes and timebase with full numeric precision. All five labs encode in under 400 bytes, and decoding validates every field, bounds coordinates and rejects reserved node names.
 - **Offline and private.** A service worker caches the app, the lab autosaves to `localStorage`, and nothing leaves the browser.
 
 ## Measured accuracy
@@ -38,8 +38,9 @@ Other checks from the same run.
 - RLC resonant peak (capacitor voltage) at 1575.554 Hz and 14.0230 dB, matching `f0 sqrt(1 - 2 zeta^2)` and `1 / (2 zeta sqrt(1 - zeta^2))` to the printed digits.
 - RC square, sine and triangle drive, RLC sine drive at f0, and an op-amp driven into its rails all stay under 0.007 % RMSE.
 - Rectifier peak diode drop 0.726 V. Newton-Raphson took 21,675 iterations over 10,000 steps, at most 5 in one step.
-- Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD.
-- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26.
+- Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD. THD is withheld with a clear reason when the window has too few cycles or the drive is non-periodic.
+- The op-amp Math trace plots output-port power, V(out) times I(out): 2.499 mW peak in lab 4. Supply consumption cannot be inferred from the three-pin model.
+- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 27 tests and passes with zero dependencies.
 
 The rectifier model is the textbook ideal-switch analysis with a Shockley forward drop. It is labelled approximate in the app and its 0.59 % RMSE is reported as is.
 
@@ -93,7 +94,7 @@ tests/engine.test.mjs       node:test suite, no dependencies
 - The op-amp has no gain-bandwidth product, slew rate or offset, so its Bode plot is flat. The diode has no series resistance, junction capacitance or reverse breakdown.
 - Fixed output time step (with exact edge handling) rather than adaptive step control. Up to 40 parts and 20,000 time steps per run.
 - No current sources, transistors, transformers or coupled inductors yet.
-- The theory check only applies while a guided lab keeps its topology. Values can change freely; adding or removing parts turns it off and says why.
+- The theory check and guided challenge grading only apply while a lab keeps its preset topology. Values can change freely; adding, removing or rewiring parts turns both off and says why. The op-amp gain challenge grades the measured AC gain, not just the component ratio.
 - The acoustic lab reports uncalibrated levels in dBFS, so it shows the shape of a speaker and microphone response, not absolute sound pressure.
 - The live-microphone path of the acoustic lab has not been tested on real hardware yet; only the simulated loopback has been run.
 - Sonification has not been tested with blind or low-vision students. It is offered as an extra channel, not as a validated accessibility tool.

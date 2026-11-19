@@ -19,16 +19,18 @@ export function parseSI(input) {
   const m = /^([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(.*)$/.exec(s);
   if (!m) return NaN;
   const base = parseFloat(m[1]);
-  let rest = m[2];
-  if (!rest) return base;
-  if (/^meg/i.test(rest)) return base * 1e6 * (validTail(rest.slice(3)) ? 1 : NaN);
+  if (!Number.isFinite(base)) return NaN;
+  const rest = m[2];
+  const finite = (v) => (Number.isFinite(v) ? v : NaN);
+  if (!rest) return finite(base);
+  if (/^meg/i.test(rest)) return finite(base * 1e6 * (validTail(rest.slice(3)) ? 1 : NaN));
   const p = rest[0];
   if (p in PREFIX) {
     const tail = rest.slice(1);
     // "1F" / "5H" style: a bare unit letter that is not a prefix is handled below.
-    if (validTail(tail)) return base * PREFIX[p];
+    if (validTail(tail)) return finite(base * PREFIX[p]);
   }
-  if (validTail(rest)) return base;
+  if (validTail(rest)) return finite(base);
   return NaN;
 }
 

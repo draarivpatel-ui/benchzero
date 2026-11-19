@@ -83,6 +83,7 @@
       <div id="inspector" class="insp-body"></div>
       <details class="timebase" id="timebase">
         <summary>Timebase and solver</summary>
+        <p class="tb-note">For stiff circuits (very different time constants), use a smaller step or choose Backward Euler. The trapezoidal default can overshoot a fast node when the step is larger than the fastest RC.</p>
         <div class="grid2">
           <label>Window<input id="in-tstop" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>
           <label>Step<input id="in-dt" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>

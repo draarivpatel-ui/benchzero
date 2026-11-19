@@ -55,6 +55,7 @@ export function hann(n) {
  * so a sine of amplitude A reads A (and 20*log10(A / fullScale) dBFS) at its peak bin.
  */
 export function spectrum(signal, fs, opts = {}) {
+  if (!(Number.isFinite(fs) && fs > 0)) return null;
   const N = Math.min(prevPow2(signal.length), opts.maxN || 16384);
   if (N < 8) return null;
   const start = signal.length - N;
@@ -85,10 +86,15 @@ export function spectrum(signal, fs, opts = {}) {
     for (let k = 1; k < M; k++) mx = Math.max(mx, amp[k]);
     fullScale = mx > 0 ? mx : 1;
   }
+  // A flat (DC-only) trace has no spectral peak: reject roundoff-sized bins so the
+  // spectrum view does not show a phantom kHz tone.
+  let peakAmp = 0;
+  for (let k = 1; k < M; k++) peakAmp = Math.max(peakAmp, amp[k]);
+  const flatPeak = !(peakAmp > 1e-7 * Math.max(1, Math.abs(mean)));
   const db = new Float64Array(M);
   for (let k = 0; k < M; k++) db[k] = 20 * Math.log10(Math.max(amp[k] / fullScale, 1e-12));
   const binHz = fs / N;
-  return { N, fs, binHz, amp, power, db, mean, fullScale, enbw, peak: findPeak(amp, binHz) };
+  return { N, fs, binHz, amp, power, db, mean, fullScale, enbw, flat: flatPeak, peak: flatPeak ? { freq: NaN, amp: 0, bin: -1 } : findPeak(amp, binHz) };
 }
 
 /**
@@ -98,6 +104,7 @@ export function spectrum(signal, fs, opts = {}) {
  * harmonics land on exact bins (bin = cycles * harmonic number).
  */
 export function spectrumCoherent(signal, fs, i0, len, opts = {}) {
+  if (!(Number.isFinite(fs) && fs > 0)) return null;
   if (len < 16 || i0 < 0 || i0 + len > signal.length - 1 + 1e-9) return null;
   let M = 1;
   while (M < len) M *= 2;
@@ -133,16 +140,23 @@ export function spectrumCoherent(signal, fs, i0, len, opts = {}) {
   const db = new Float64Array(half);
   for (let k = 0; k < half; k++) db[k] = 20 * Math.log10(Math.max(amp[k] / fullScale, 1e-12));
   const binHz = fs / len;
-  let k = 1;
-  for (let i = 2; i < half; i++) if (amp[i] > amp[k]) k = i;
-  return { N: M, fs: binHz * M, binHz, amp, power, db, mean, fullScale, enbw: 1, coherent: true, peak: { freq: k * binHz, amp: amp[k], bin: k } };
+  let peakBin = 1;
+  let peakAmp = 0;
+  for (let i = 1; i < half; i++) if (amp[i] > peakAmp) { peakAmp = amp[i]; peakBin = i; }
+  const flat = !(peakAmp > 1e-9 * Math.max(1, Math.abs(mean)));
+  return {
+    N: M, fs, binHz, amp, power, db, mean, fullScale, enbw: 1, coherent: true, flat,
+    peak: flat ? { freq: NaN, amp: 0, bin: -1 } : { freq: peakBin * binHz, amp: amp[peakBin], bin: peakBin },
+  };
 }
 
 /** Largest non-DC bin, refined by parabolic interpolation on the log magnitude. */
 export function findPeak(amp, binHz) {
   let k = -1;
   let best = 0;
-  for (let i = 2; i < amp.length - 1; i++) {
+  // Include bin 1: a low-frequency tone can occupy the first bin and must not be
+  // reported at 1.5x its true frequency.
+  for (let i = 1; i < amp.length - 1; i++) {
     if (amp[i] > best) { best = amp[i]; k = i; }
   }
   if (k < 0 || best <= 0) return { freq: NaN, amp: 0, bin: -1 };
@@ -155,33 +169,68 @@ export function findPeak(amp, binHz) {
   return { freq: (k + p) * binHz, amp: peakAmp, bin: k };
 }
 
+/** The reason THD is unavailable, or null when it can be measured. */
+function thdReason(spec, f0, maxHarmonics) {
+  if (!spec || !Number.isFinite(spec.binHz) || !(spec.binHz > 0) || !Number.isFinite(spec.fs) || !(spec.fs > 0)) {
+    return 'N/A (invalid spectrum)';
+  }
+  if (!Number.isFinite(f0) || !(f0 > 0)) return 'N/A (no fundamental)';
+  const binsPerCycle = f0 / spec.binHz;
+  const minBins = spec.coherent ? 2 : 8; // coherent spectra resolve tones on exact bins without leakage
+  if (!(binsPerCycle >= minBins)) return 'N/A (too few cycles)';
+  // Highest requested harmonic must fit below Nyquist with its whole band.
+  const highest = maxHarmonics * f0;
+  if (!(highest < spec.fs / 2 - spec.binHz)) return 'N/A (harmonic above Nyquist)';
+  return null;
+}
+
 /**
  * Total harmonic distortion from a spectrum, given the fundamental frequency.
- * Power is summed over +/- 3 bins around each harmonic (Hann main lobe is +/- 2 bins).
+ * Each harmonic is integrated over a NON-OVERLAPPING half-bin-bandwidth window so a
+ * fundamental's energy can never be re-counted as distortion. Waveforms that do not have
+ * enough cycles in the window, or whose harmonics leave the Nyquist range, report an
+ * explicit unavailable reason instead of a fabricated percentage.
  */
 export function thd(spec, f0, maxHarmonics = 10) {
-  if (!spec || !(f0 > 0)) return { ratio: NaN, percent: NaN, db: NaN, harmonics: [] };
-  // Coherent spectra put each harmonic on one exact bin; windowed ones spread it over +/- 3 bins.
-  const w = spec.coherent ? 0 : 3;
+  const reason = thdReason(spec, f0, maxHarmonics);
+  if (reason) return { ratio: NaN, percent: NaN, db: NaN, harmonics: [], reason };
+  const binHz = spec.binHz;
+  const h1 = Math.max(1, Math.round(f0 / binHz));
+  // Coherent spectra put each tone on one exact bin; Hann spectra need the main lobe,
+  // capped at half the spacing to the neighbouring harmonic so bands never overlap.
+  const spacing = h1; // bins between harmonics for a coherent/harmonic signal
+  const half = spec.coherent ? 0 : Math.max(1, Math.min(3, Math.floor(spacing / 2) - (spacing % 2 === 0 ? 1 : 0)));
   const band = (f) => {
-    const c = Math.round(f / spec.binHz);
+    const c = Math.round(f / binHz);
+    // Clamp each harmonic's centre to its own expected bin region; never reach bin 0 (DC).
     let s = 0;
-    for (let k = Math.max(1, c - w); k <= Math.min(spec.power.length - 1, c + w); k++) s += spec.power[k];
+    for (let k = Math.max(1, c - half); k <= Math.min(spec.power.length - 1, c + half); k++) s += spec.power[k];
     return s;
   };
   const p1 = band(f0);
+  if (!(p1 > 0)) return { ratio: NaN, percent: NaN, db: NaN, harmonics: [], reason: 'N/A (no fundamental)' };
+  // Periodicity guard: for a non-periodic signal (a chirp) the energy in the harmonic
+  // bins is not concentrated there - it is spread across the whole spectrum. Compare the
+  // summed harmonic-band power with the signal's total AC power; a periodic waveform
+  // keeps a large share of its power in the fundamental + harmonics.
+  let total = 0;
+  for (let k = 1; k < spec.power.length - 1; k++) total += spec.power[k];
+  const fundamentalBand = band(f0);
+  if (total > 0 && fundamentalBand / total < 0.08) {
+    return { ratio: NaN, percent: NaN, db: NaN, harmonics: [], reason: 'N/A (non-periodic)' };
+  }
   const enbw = spec.enbw || 1.5;
   const harmonics = [{ n: 1, freq: f0, amp: Math.sqrt(p1 / enbw) }];
   let ph = 0;
   for (let h = 2; h <= maxHarmonics; h++) {
     const f = h * f0;
-    if (f + w * spec.binHz >= spec.fs / 2) break;
+    if (f >= spec.fs / 2 - binHz) break;
     const p = band(f);
     harmonics.push({ n: h, freq: f, amp: Math.sqrt(p / enbw) });
     ph += p;
   }
-  const ratio = p1 > 0 ? Math.sqrt(ph / p1) : NaN;
-  return { ratio, percent: 100 * ratio, db: 20 * Math.log10(Math.max(ratio, 1e-12)), harmonics };
+  const ratio = Math.sqrt(ph / p1);
+  return { ratio, percent: 100 * ratio, db: 20 * Math.log10(Math.max(ratio, 1e-12)), harmonics, reason: null };
 }
 
 /**

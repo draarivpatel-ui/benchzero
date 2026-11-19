@@ -25,7 +25,7 @@ const UNITS = { R: 'Ω', C: 'F', L: 'H' };
 
 /** Terminal grid positions of a part, in node order. */
 export function terminals(p) {
-  const [x, y, r] = p.at || [0, 0, 0];
+  const [x, y, r] = p.at && p.at.length === 3 ? p.at : [0, 0, 0];
   if (p.type === 'OPAMP') {
     const s = r === 2 ? -1 : 1;
     return [[x - 2 * s, y + 1], [x - 2 * s, y - 1], [x + 2 * s, y]];
@@ -38,16 +38,23 @@ export function terminals(p) {
   }
 }
 
-/** Junction position of every non-ground node. */
+const WORLD_LIMIT = 2000;
+const clampWorld = (v) => (Number.isFinite(v) ? Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, v)) : 0);
+
+/** Junction position of every non-ground node. Node tables are prototype-free. */
 export function nodePositions(circuit) {
-  const pos = {};
+  const pos = Object.create(null);
   for (const p of circuit.parts) {
     const ts = terminals(p);
     p.nodes.forEach((n, i) => {
-      if (n !== '0' && !pos[n]) pos[n] = ts[i].slice();
+      if (n !== '0' && pos[n] === undefined) pos[n] = ts[i].map(clampWorld);
     });
   }
-  if (circuit.nodePos) for (const [n, xy] of Object.entries(circuit.nodePos)) if (pos[n]) pos[n] = xy.slice();
+  if (circuit.nodePos) {
+    for (const [n, xy] of Object.entries(circuit.nodePos)) {
+      if (pos[n] !== undefined && xy && xy.length >= 2) pos[n] = [clampWorld(xy[0]), clampWorld(xy[1])];
+    }
+  }
   return pos;
 }
 
@@ -117,12 +124,18 @@ export class Schematic {
     if (!Number.isFinite(x0)) { x0 = 0; y0 = 0; x1 = 1; y1 = 1; }
     // Room for labels, badges and ground symbols.
     x0 -= 1.4; y0 -= 1.3; y1 += 1.7;
-    // Badges hang to the right of the rightmost node, so reserve their width in pixels.
-    // Narrow screens switch to compact badges (voltage only) and id-only labels.
-    let reserve = 120;
-    let u = Math.min((this.W - reserve) / (x1 - x0), this.H / (y1 - y0));
+    // Badges hang to the right of the rightmost node. Reserve the real measured badge
+    // rectangle (offset + width) so the far-right voltage reading cannot clip at any width.
+    const ctx = this.ctx;
+    ctx.font = MONO_SM;
+    const compactReserve = ctx.measureText('-00.00 mV').width + 10 + 8;
+    const fullReserve = ctx.measureText('out -00.000 mV').width + 12 + 8;
+    const spanX = Math.max(1e-6, x1 - x0);
+    const spanY = Math.max(1e-6, y1 - y0);
+    let u = Math.min((this.W - fullReserve) / spanX, this.H / spanY);
     this.compact = u < 34;
-    if (this.compact) { reserve = 62; u = Math.min((this.W - reserve) / (x1 - x0), this.H / (y1 - y0)); }
+    const reserve = this.compact ? compactReserve : fullReserve;
+    u = Math.min((this.W - reserve) / spanX, this.H / spanY);
     u = Math.max(16, Math.min(64, u));
     x1 += reserve / u;
     this.view = { u, ox: (this.W - u * (x1 + x0)) / 2, oy: (this.H - u * (y1 + y0)) / 2 };
@@ -179,6 +192,8 @@ export class Schematic {
       if (this.h.onSelect) this.h.onSelect(id);
       if (id) {
         const p = this.circuit.parts.find((q) => q.id === id);
+        if (!p) return;
+        if (!Array.isArray(p.at) || p.at.length !== 3) p.at = [0, 0, 0];
         const [gx, gy] = this.toGrid(x, y);
         this.drag = { id, dx: gx - p.at[0], dy: gy - p.at[1], moved: false, pointer: e.pointerId };
         c.setPointerCapture(e.pointerId);
@@ -189,9 +204,10 @@ export class Schematic {
       if (this.drag) {
         const p = this.circuit.parts.find((q) => q.id === this.drag.id);
         if (!p) return;
+        if (!Array.isArray(p.at) || p.at.length !== 3) p.at = [0, 0, 0];
         const [gx, gy] = this.toGrid(x, y);
-        const nx = Math.round(gx - this.drag.dx);
-        const ny = Math.round(gy - this.drag.dy);
+        const nx = Math.round(clampWorld(gx - this.drag.dx));
+        const ny = Math.round(clampWorld(gy - this.drag.dy));
         if (nx !== p.at[0] || ny !== p.at[1]) {
           p.at = [nx, ny, p.at[2]];
           this.drag.moved = true;
@@ -227,9 +243,15 @@ export class Schematic {
     ctx.fillStyle = COLORS.grid;
     const [gx0, gy0] = this.toGrid(0, 0);
     const [gx1, gy1] = this.toGrid(this.W, this.H);
-    for (let gx = Math.floor(gx0); gx <= gx1; gx++) {
-      for (let gy = Math.floor(gy0); gy <= gy1; gy++) {
+    // Bound the grid work so even a hostile coordinate cannot stall the animation loop.
+    const loX = Math.floor(clampWorld(gx0));
+    const hiX = Math.ceil(clampWorld(gx1));
+    const loY = Math.floor(clampWorld(gy0));
+    const hiY = Math.ceil(clampWorld(gy1));
+    for (let gx = loX; gx <= hiX; gx++) {
+      for (let gy = loY; gy <= hiY; gy++) {
         const [px, py] = this.toPx(gx, gy);
+        if (px < -2 || px > this.W + 2 || py < -2 || py > this.H + 2) continue;
         ctx.fillRect(px - 0.75, py - 0.75, 1.5, 1.5);
       }
     }
@@ -280,7 +302,7 @@ export class Schematic {
     }
 
     // Junction dots, probes and voltage badges.
-    const degree = {};
+    const degree = Object.create(null);
     for (const p of this.circuit.parts) for (const n of p.nodes) degree[n] = (degree[n] || 0) + 1;
     const probes = this.circuit.probes || {};
     for (const [n, [x, y]] of Object.entries(pos)) {

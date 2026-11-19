@@ -30,6 +30,7 @@ const state = {
   sweepPos: 0,
   result: null,
   seq: 0,
+  gen: 0, // circuit generation: bumped whenever a new lab/circuit is loaded
   applied: 0,
   done: new Set(),
   cursorSel: 0,
@@ -98,6 +99,12 @@ function presetIndexFor(circuit) {
 
 function loadCircuit(circuit, { announceIt = true } = {}) {
   sonifier.stop();
+  // Invalidate every in-flight solve and clear stale verification toasts before switching labs.
+  state.seq++;
+  state.gen++;
+  state.applied = state.seq;
+  clearTimeout(toastTimer);
+  $('#toast').hidden = true;
   state.circuit = circuit;
   state.presetIdx = presetIndexFor(circuit);
   state.selected = null;
@@ -139,11 +146,17 @@ function save() {
 let computeTimer = 0;
 function compute(delay = 0) {
   clearTimeout(computeTimer);
+  // Allocate the request identity now, before the async result returns, so an intervening
+  // load/edit cannot be overwritten by a stale answer.
+  const id = ++state.seq;
+  const gen = state.gen;
+  const token = `${gen}:${state.circuit.lab || ''}:${state.presetIdx}`;
   computeTimer = setTimeout(async () => {
-    const id = ++state.seq;
     const snapshot = JSON.parse(JSON.stringify(state.circuit));
-    const res = await bridge.run(snapshot);
-    if (id < state.applied) return; // a newer result already landed
+    const res = await bridge.run(snapshot, id);
+    if (res && res.seq !== undefined && res.seq !== id) return;
+    if (id !== state.seq || gen !== state.gen || id <= state.applied) return;
+    if (token !== `${state.gen}:${state.circuit.lab || ''}:${state.presetIdx}`) return;
     state.applied = id;
     applyResult(res);
   }, delay);
@@ -322,6 +335,7 @@ function updateTelemetry() {
   else if (r.ac && r.ac.ok && r.ac.refined && Number.isFinite(r.ac.refined.f3dB)) { key = 'fc'; val = fmtNum(r.ac.refined.f3dB, 'Hz'); }
   $('#m-f0k').textContent = key;
   set('#m-f0', val);
+  $('#m-f0').title = key === 'Vth / Rth' && s ? `Vth ${fmtNum(s.vth, 'V', 6)}, Rth ${fmtNum(s.rth, 'Ω', 6)}` : val;
   set('#m-rmse', v && v.ok ? `${fmtPct(v.rmsePct)}` : '--');
   set('#m-ms', `${r.timing.total.toFixed(1)} ms${bridge.mode === 'worker' ? '' : ' (main)'}`);
   $('#m-ms').title = `Transient ${r.timing.tran.toFixed(1)} ms, AC ${r.timing.ac.toFixed(1)} ms, theory ${r.timing.theory.toFixed(1)} ms, computed in ${bridge.mode === 'worker' ? 'a Web Worker' : 'the main thread'}`;
@@ -495,6 +509,7 @@ function siField(label, value, unit, onSet, range) {
   const commit = () => {
     const v = parseSI(input.value);
     if (!Number.isFinite(v)) { input.setAttribute('aria-invalid', 'true'); announce(`${label} needs a number like 1k, 100n or 4.7m.`); return; }
+    if (label === 'Value' && !(v > 0)) { input.setAttribute('aria-invalid', 'true'); announce('Value must be positive.'); return; }
     input.removeAttribute('aria-invalid');
     if (slider) slider.value = String(Math.round(1000 * logToUnit(Math.min(range[1], Math.max(range[0], Math.abs(v) || range[0])), range[0], range[1])));
     onSet(v, false);
@@ -638,7 +653,10 @@ function renderInspector() {
 
   const actions = document.createElement('div');
   actions.className = 'row-actions';
-  actions.innerHTML = '<button type="button" class="btn btn-small" data-act="rot">Rotate</button><button type="button" class="btn btn-small" data-act="math">Use for Math V×I</button><button type="button" class="btn btn-small btn-danger" data-act="del">Delete</button>';
+  const mathBtn = p.type === 'OPAMP'
+    ? '<button type="button" class="btn btn-small" data-act="math" title="Use the output-port power of this op-amp for the Math trace">Use for output power</button>'
+    : '<button type="button" class="btn btn-small" data-act="math">Use for Math V×I</button>';
+  actions.innerHTML = `<button type="button" class="btn btn-small" data-act="rot">Rotate</button>${mathBtn}<button type="button" class="btn btn-small btn-danger" data-act="del">Delete</button>`;
   actions.querySelector('[data-act=rot]').addEventListener('click', () => {
     const a = p.at || [0, 0, 0];
     p.at = [a[0], a[1], p.type === 'OPAMP' ? (a[2] === 2 ? 0 : 2) : (a[2] + 1) % 4];
@@ -864,8 +882,15 @@ function bind() {
   $('#btn-share').addEventListener('click', share);
   $('#btn-help').addEventListener('click', () => $('#help').showModal());
   $('#btn-verify').addEventListener('click', async () => {
-    const res = await bridge.run(JSON.parse(JSON.stringify(state.circuit)));
-    state.applied = ++state.seq;
+    // Claim the request slot synchronously. Any new solve or lab switch during the await
+    // advances state.seq/gen, so this result is recognised as stale and discarded.
+    const id = ++state.seq;
+    const gen = state.gen;
+    const lab = state.circuit.lab || '';
+    const res = await bridge.run(JSON.parse(JSON.stringify(state.circuit)), id);
+    if (id !== state.seq || gen !== state.gen || lab !== (state.circuit.lab || '')) return;
+    if (res && res.seq !== undefined && res.seq !== id) return;
+    state.applied = id;
     applyResult(res);
     renderVerify(true);
   });

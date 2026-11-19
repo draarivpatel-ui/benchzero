@@ -3,13 +3,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseSI, formatSI, toSIInput } from '../src/units.js';
-import { transient, acSweep, dcOperatingPoint, solveDense } from '../src/mna.js';
+import { transient, acSweep, dcOperatingPoint, solveDense, logFreqs } from '../src/mna.js';
 import { fft, spectrum, thd, measure } from '../src/fft.js';
 import { theoryFor, verify, compareCurves } from '../src/theory.js';
 import { computeLab } from '../src/compute.js';
 import { PRESETS, presetCircuit } from '../src/presets.js';
 import { encodeLab, decodeLab, labFromHash } from '../src/serialize.js';
 import { normalizeWave, waveValue, chirpFreqAt } from '../src/waves.js';
+import { Scope } from '../src/scope.js';
 
 const TWO_PI = 2 * Math.PI;
 const report = [];
@@ -438,4 +439,175 @@ test('Every challenge can be solved, and solving it never turns a verify check r
       for (const k of lab.verify.checks) assert.ok(k.pass, `${p.id} challenge ${i + 1} check "${k.name}": expected ${k.expected}, got ${k.measured}`);
     });
   }
+});
+
+/* ------------------------------------------------------------------ */
+/* Sol Max final review regressions                                    */
+/* ------------------------------------------------------------------ */
+
+function tamperedCode(mutate) {
+  const c = presetCircuit('rc');
+  const o = JSON.parse(atob(encodeLab(c).replace(/-/g, '+').replace(/_/g, '/')));
+  mutate(o);
+  return btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+test('M1: hostile share links are rejected; missing layouts are normalized', () => {
+  for (const name of ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf', 'hasOwnProperty']) {
+    const code = tamperedCode((o) => { o.p[0][2] = `${name},0`; });
+    const r = decodeLab(code);
+    assert.equal(r.ok, false, `node name ${name} must be rejected`);
+  }
+  const huge = tamperedCode((o) => { o.p[0][4] = [1e300, -1e300, 0]; });
+  assert.equal(decodeLab(huge).ok, false, '1e300 coordinates must be rejected');
+  const stringSim = tamperedCode((o) => { o.s = ['1', '0.001']; });
+  assert.equal(decodeLab(stringSim).ok, false, 'numeric strings in timebase must be rejected');
+  const strOpamp = tamperedCode((o) => { o.p.push(['OPAMP', 'U9', '0,x,y', ['100', '2'], [1, 1, 0]]); });
+  assert.equal(decodeLab(strOpamp).ok, false, 'numeric strings in op-amp settings must be rejected');
+  const missing = tamperedCode((o) => { o.p[0][4] = 0; });
+  const d = decodeLab(missing);
+  assert.ok(d.ok, d.error);
+  for (const p of d.circuit.parts) assert.ok(Array.isArray(p.at) && p.at.length === 3, 'every decoded part has a layout');
+  // nodePos tables are prototype-free.
+  const npCode = tamperedCode((o) => { o.n = [['out', 3, 4]]; });
+  const r = decodeLab(npCode);
+  assert.ok(r.ok && r.circuit.nodePos && Object.getPrototypeOf(r.circuit.nodePos) === null);
+});
+
+test('M1 nit: malformed lab hash returns a readable error; precision is full', () => {
+  const h = labFromHash('#lab=!!!');
+  assert.ok(h && h.ok === false && /malformed/i.test(h.error));
+  const c = presetCircuit('rc');
+  c.parts[1].value = 1234.56789;
+  const d = decodeLab(encodeLab(c));
+  assert.ok(d.ok && d.circuit.parts[1].value === 1234.56789, 'full numeric precision round-trips');
+});
+
+test('M3: clean sine has no fabricated THD; chirp is not graded as periodic', () => {
+  const c = presetCircuit('div');
+  c.parts[0].wave = { kind: 'sine', amp: 1, offset: 10, freq: 1, phase: -90 };
+  c.sim = { tstop: 1.5, dt: 0.003 };
+  const lab = computeLab(c);
+  const t = lab.chans.ch1.thd;
+  assert.ok(t && !Number.isFinite(t.percent), 'short clean sine must not report a percentage');
+  assert.ok(/few cycles|non-periodic/.test(t.reason), `reason ${t.reason}`);
+  const chirp = presetCircuit('rc');
+  chirp.parts[0].wave = { kind: 'chirp', amp: 1, freq: 100, f2: 10000, sweep: 0.01 };
+  chirp.sim = { tstop: 0.01, dt: 1e-6 };
+  const cl = computeLab(chirp);
+  assert.ok(!cl.chans.ch2.thd || !Number.isFinite(cl.chans.ch2.thd.percent), 'chirp must not report THD');
+  // Hann bands never overlap: a pure sine at 16 bins per cycle stays near zero.
+  const fs = 48000;
+  const N = 8192;
+  const x = new Float64Array(N);
+  for (let i = 0; i < N; i++) x[i] = Math.sin((TWO_PI * 16 * fs / N * i) / fs) * 0.5 + 3;
+  const s = spectrum(x, fs);
+  const tt = thd(s, 16 * fs / N, 10);
+  assert.ok(!Number.isFinite(tt.percent) || tt.percent < 1, `pure Hann sine THD ${tt.percent}`);
+});
+
+test('M3: square-wave THD matches the Fourier series H2..H10', () => {
+  const c = presetCircuit('rc');
+  c.parts[0].wave = { kind: 'square', amp: 2.5, offset: 2.5, freq: 200 };
+  c.sim = { tstop: 20e-3, dt: 2e-6 };
+  const lab = computeLab(c);
+  const t = lab.chans.ch2.thd;
+  const expect = 100 * Math.sqrt([3, 5, 7, 9].reduce((a, k) => a + 1 / (k * k), 0));
+  assert.ok(Math.abs(t.percent - expect) < 0.05, `THD ${t.percent} vs ${expect}`);
+  assert.equal(t.harmonics[t.harmonics.length - 1].n, 10);
+});
+
+test('M4: op-amp Math power is output-port V(out)*I(out), about 2.5 mW', () => {
+  const c = presetCircuit('inv');
+  c.math = 'U1';
+  const lab = computeLab(c);
+  assert.ok(lab.ok && lab.math && lab.math.type === 'OPAMP');
+  let peak = 0;
+  for (const v of lab.math.power) peak = Math.max(peak, Math.abs(v));
+  assert.ok(Math.abs(peak * 1e3 - 2.5) < 0.05, `peak output power ${(peak * 1e3).toFixed(4)} mW`);
+});
+
+test('M5: edited topology fails the -22 gain challenge even though R2/R1 is 22', () => {
+  const c = presetCircuit('inv');
+  c.parts.find((p) => p.id === 'R2').value = 22000;
+  c.parts.push({ id: 'R3', type: 'R', nodes: ['inv', 'out'], value: 1000, at: [8, 8, 0] });
+  const lab = computeLab(c);
+  const ctx = { circuit: c, parts: Object.fromEntries(c.parts.map((q) => [q.id, q])), result: lab };
+  const ch = PRESETS.find((p) => p.id === 'inv').challenges[0];
+  assert.equal(ch.test(ctx), false, 'parallel feedback resistor must block the challenge');
+  const gain = Math.abs(10 ** (lab.ac.mag[Math.floor(lab.ac.mag.length / 2)] / 20));
+  assert.ok(Math.abs(gain - 0.9565) < 0.01, `measured gain ${gain}`);
+  // All 15 solved states still pass (covered above) and a clean -22 state still passes.
+  const clean = presetCircuit('inv');
+  clean.parts.find((p) => p.id === 'R2').value = 22000;
+  const cl = computeLab(clean);
+  const cctx = { circuit: clean, parts: Object.fromEntries(clean.parts.map((q) => [q.id, q])), result: cl };
+  assert.equal(ch.test(cctx), true);
+});
+
+test('S4: zero and negative RLC steps never print NaN overshoot', () => {
+  for (const amp of [0, -5, 5]) {
+    const c = presetCircuit('rlc');
+    c.parts[0].wave = { ...c.parts[0].wave, amp };
+    const lab = computeLab(c);
+    assert.ok(lab.verify.ok, `amp ${amp}: ${lab.verify.reason}`);
+    const os = lab.verify.checks.find((x) => x.name === 'Step overshoot');
+    if (amp === 0) {
+      assert.ok(os.skipped && os.note === 'N/A (zero step)');
+    } else {
+      assert.ok(os.pass && Number.isFinite(os.measured), `amp ${amp}: overshoot ${os.measured}`);
+    }
+  }
+});
+
+test('S5/S6: non-finite inputs and huge breakpoint lists give structured errors', () => {
+  const c = presetCircuit('rc');
+  assert.equal(transient(c, { tstop: Infinity, dt: Infinity }).error.code, 'BAD_SIM');
+  assert.equal(transient(c, { tstop: NaN, dt: 1 }).error.code, 'BAD_SIM');
+  const sq = presetCircuit('rc');
+  sq.parts[0].wave = { kind: 'square', amp: 1, freq: 1e6, duty: 0.5 };
+  const r = transient(sq, { tstop: 0.1, dt: 10e-6 });
+  assert.equal(r.ok, false);
+  assert.equal(r.error.code, 'BAD_SIM');
+  assert.ok(/edges/i.test(r.error.message));
+  assert.equal(acSweep(c, { source: 'V1', out: 'out', freqs: [NaN] }).error.code, 'BAD_AC');
+  assert.equal(acSweep(c, { source: 'V1', out: 'out', freqs: [0] }).error.code, 'BAD_AC');
+  assert.equal(logFreqs(0, 100).length, 0);
+  assert.ok(Number.isNaN(parseSI('1e309')));
+});
+
+test('S2: phase at the exact refined cutoff is interpolated', () => {
+  const lab = computeLab(presetCircuit('rc'));
+  const fc = lab.ac.refined.f3dB;
+  assert.ok(Math.abs(lab.ac.refined.phaseAtFc - -45) < 0.01, `phase at fc ${lab.ac.refined.phaseAtFc}`);
+  const k = lab.ac.freqs.findIndex((f) => f >= fc);
+  assert.ok(Math.abs(lab.ac.phase[k] - -45) > 0.01, 'raw bin phase differs from interpolated value');
+});
+
+test('Scope._drawFFT stays safe when THD is unavailable with empty harmonics', () => {
+  const c = presetCircuit('rc');
+  c.parts[0].wave = { kind: 'square', amp: 2.5, offset: 2.5, freq: 1000 };
+  c.sim = { tstop: 400e-6, dt: 1e-6 };
+  const lab = computeLab(c);
+  assert.ok(lab.chans.ch1.thd && Array.isArray(lab.chans.ch1.thd.harmonics));
+  assert.equal(lab.chans.ch1.thd.harmonics.length, 0);
+  const noop = () => {};
+  const texts = [];
+  const ctx = {
+    font: '', fillStyle: '', strokeStyle: '', lineWidth: 1, textAlign: 'left', textBaseline: 'alphabetic',
+    save: noop, restore: noop, beginPath: noop, closePath: noop, moveTo: noop, lineTo: noop, arcTo: noop, stroke: noop, fill: noop,
+    rect: noop, clip: noop, clearRect: noop, fillRect: noop, strokeRect: noop, setLineDash: noop, roundRect: noop,
+    measureText: (t) => ({ width: String(t).length * 7 }),
+    fillText: (t) => texts.push(String(t)),
+  };
+  const scope = Object.create(Scope.prototype);
+  scope.ctx = ctx;
+  scope.W = 800;
+  scope.H = 400;
+  scope.plot = { x: 56, y: 24, w: 720, h: 330 };
+  scope.result = lab;
+  scope.flags = { ch1: true, ch2: true, theory: true, math: false };
+  scope.view = 'fft';
+  scope._drawFFT();
+  assert.ok(texts.some((t) => /THD/i.test(t)), `expected THD reason tag, got: ${texts.join(' | ')}`);
 });

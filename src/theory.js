@@ -366,7 +366,13 @@ export function compareCurves(sim, theory) {
     if (Math.abs(theory[i]) > fs) fs = Math.abs(theory[i]);
   }
   const rmse = Math.sqrt(se / n);
-  return { rmse, maxErr: mx, fullScale: fs, rmsePct: fs > 0 ? (100 * rmse) / fs : NaN, maxPct: fs > 0 ? (100 * mx) / fs : NaN };
+  // A zero-signal theory curve has no meaningful full-scale percentage; report 0 when the
+  // simulation also matches it exactly, NaN otherwise (rendered as -- by the UI).
+  return {
+    rmse, maxErr: mx, fullScale: fs,
+    rmsePct: fs > 0 ? (100 * rmse) / fs : (mx === 0 ? 0 : NaN),
+    maxPct: fs > 0 ? (100 * mx) / fs : (mx === 0 ? 0 : NaN),
+  };
 }
 
 /** Frequency where an AC sweep's magnitude first falls to (reference - 3.0103 dB), log-interpolated. */
@@ -445,11 +451,17 @@ export function verify(circuit, tran, ac) {
     }
     const w = normalizeWave(P.V1.wave);
     if (w.kind === 'step' && s.zeta < 1) {
-      // Overshoot of a second-order step: exp(-pi*zeta/sqrt(1-zeta^2)).
-      let mx = -Infinity;
-      for (const v of out) mx = Math.max(mx, v);
-      const os = Math.exp((-Math.PI * s.zeta) / Math.sqrt(1 - s.zeta * s.zeta));
-      checks.push(check('Step overshoot', 100 * os, (100 * (mx - w.offset - w.amp)) / w.amp, '%', 2, 0.05));
+      // Overshoot is a percentage of the step amplitude. A zero-amplitude step has no
+      // defined overshoot; a negative step must be measured relative to its own direction.
+      if (w.amp === 0) {
+        checks.push({ name: 'Step overshoot', expected: NaN, measured: NaN, unit: '%', tolPct: 0, pass: true, skipped: true, note: 'N/A (zero step)' });
+      } else {
+        const os = Math.exp((-Math.PI * s.zeta) / Math.sqrt(1 - s.zeta * s.zeta));
+        let extreme = w.amp > 0 ? -Infinity : Infinity;
+        for (const v of out) extreme = w.amp > 0 ? Math.max(extreme, v) : Math.min(extreme, v);
+        const measured = (100 * Math.abs(extreme - w.offset - w.amp)) / Math.abs(w.amp);
+        checks.push(check('Step overshoot', 100 * os, measured, '%', 2, 0.05));
+      }
     }
   }
   if (th.lab === 'rect') {

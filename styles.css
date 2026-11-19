@@ -239,9 +239,9 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   font-size: 19px;
   line-height: 1.15;
   color: var(--ch1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
 }
 #m-rmse { color: var(--theory); text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
@@ -268,6 +268,7 @@ input[type='range'] { width: 100%; accent-color: var(--ch1); }
 .btn-danger { border-color: rgba(248, 113, 113, 0.45); color: #fecaca; }
 .timebase { margin: 0 12px 12px; border-top: 1px solid var(--bezel); padding-top: 8px; }
 .timebase summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.tb-note { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.4; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
 .grid2 label { display: grid; gap: 4px; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
 

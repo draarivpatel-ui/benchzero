@@ -58,17 +58,20 @@ export function createBridge({ onMode } = {}) {
 
   return {
     get mode() { return mode; },
-    async run(circuit) {
+    async run(circuit, tagSeq) {
+      // Echo the caller's monotonically increasing request id onto the result so the app can
+      // reject a stale response with a strict identity check.
+      const stamp = (r) => { if (r && typeof r === 'object') r.seq = tagSeq; return r; };
       await ready;
-      if (!worker) return runSync(circuit);
+      if (!worker) return stamp(runSync(circuit));
       const id = ++seq;
       return new Promise((resolve) => {
-        pending.set(id, { resolve, circuit });
+        pending.set(id, { resolve: (r) => resolve(stamp(r)), circuit });
         try {
           worker.postMessage({ id, circuit });
         } catch {
           pending.delete(id);
-          resolve(runSync(circuit));
+          resolve(stamp(runSync(circuit)));
         }
       });
     },

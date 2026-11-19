@@ -48,23 +48,34 @@ export function computeLab(circuit) {
     }
     if (!spec) spec = spectrum(sig, fs);
     const f0 = Number.isFinite(m.freq) ? m.freq : spec && spec.peak.freq;
+    // Only attempt THD on a periodic drive; a chirp or step has no fixed fundamental.
+    const vwave = circuit.parts.find((p) => p.type === 'V');
+    const periodicDrive = vwave && vwave.wave && ['sine', 'square', 'triangle'].includes(vwave.wave.kind);
     chans[ch] = {
       node,
       metrics: m,
-      spectrum: spec ? { binHz: spec.binHz, db: spec.db, amp: spec.amp, N: spec.N, peak: spec.peak, fullScale: spec.fullScale, enbw: spec.enbw, coherent: !!spec.coherent } : null,
-      thd: spec && Number.isFinite(m.freq) ? thd(spec, f0, 10) : null,
+      spectrum: spec ? { binHz: spec.binHz, db: spec.db, amp: spec.amp, N: spec.N, peak: spec.peak, fullScale: spec.fullScale, enbw: spec.enbw, coherent: !!spec.coherent, flat: !!spec.flat } : null,
+      thd: spec && periodicDrive && Number.isFinite(f0) ? thd(spec, f0, 10) : null,
     };
   }
-  // Math trace: instantaneous power V*I in the chosen part.
+  // Math trace: instantaneous power V*I at a real two-terminal port.
   let math = null;
   const mp = circuit.math && circuit.parts.find((p) => p.id === circuit.math);
   if (mp) {
-    const va = mp.nodes[0] === '0' ? null : tran.nodes[mp.nodes[0]];
-    const vb = mp.nodes[1] === '0' ? null : tran.nodes[mp.nodes[1]];
-    const cur = tran.currents[mp.id];
     const p = new Float64Array(tran.t.length);
-    for (let i = 0; i < p.length; i++) p[i] = ((va ? va[i] : 0) - (vb ? vb[i] : 0)) * cur[i];
-    math = { part: mp.id, power: p };
+    if (mp.type === 'OPAMP') {
+      // The ideal three-pin model has no supply current. The one meaningful port is the
+      // output: power delivered by the op-amp to its load = V(out) * I(out flowing out).
+      const out = mp.nodes[2] === '0' ? null : tran.nodes[mp.nodes[2]];
+      const cur = tran.currents[mp.id]; // partCurrent(OPAMP) = -branch current = current out
+      for (let i = 0; i < p.length; i++) p[i] = (out ? out[i] : 0) * cur[i];
+    } else {
+      const va = mp.nodes[0] === '0' ? null : tran.nodes[mp.nodes[0]];
+      const vb = mp.nodes[1] === '0' ? null : tran.nodes[mp.nodes[1]];
+      const cur = tran.currents[mp.id];
+      for (let i = 0; i < p.length; i++) p[i] = ((va ? va[i] : 0) - (vb ? vb[i] : 0)) * cur[i];
+    }
+    math = { part: mp.id, type: mp.type, power: p };
   }
   let ac = null;
   if (circuit.ac && circuit.parts.some((p) => p.type === 'V')) {
@@ -124,7 +135,7 @@ export function refineAC(circuit, ac, source, out) {
     const r = acSweep(circuit, { source, out, freqs: [f] });
     return r.ok ? r.mag[0] : NaN;
   };
-  const res = { f3dB: NaN, peakFreq: NaN, peakDb: NaN };
+  const res = { f3dB: NaN, peakFreq: NaN, peakDb: NaN, phaseAtFc: NaN };
   // Reference is the low-frequency (passband) gain, taken four decades below the sweep start.
   const ref = at(ac.freqs[0] * 1e-4);
   const target = ref - 10 * Math.log10(2);
@@ -140,6 +151,22 @@ export function refineAC(circuit, ac, source, out) {
       res.f3dB = 10 ** ((lo + hi) / 2);
       break;
     }
+  }
+  // Interpolate phase at the exact refined cutoff (log-frequency, between bracketing sweep bins)
+  // so the tag reads -45.0 degrees at fc instead of the first bin above it.
+  if (Number.isFinite(res.f3dB) && ac.freqs.length >= 2) {
+    const f = res.f3dB;
+    let hi = ac.freqs.findIndex((x) => x >= f);
+    if (hi <= 0) hi = ac.freqs.length - 1;
+    const lo = hi - 1;
+    const a = Math.log10(ac.freqs[lo]);
+    const b = Math.log10(ac.freqs[hi]);
+    const u = b > a ? (Math.log10(f) - a) / (b - a) : 0;
+    let phase = ac.phase[lo] + u * (ac.phase[hi] - ac.phase[lo]);
+    // Match the unwrapped branch by comparing with the nearest measured sample.
+    const nearest = u < 0.5 ? ac.phase[lo] : ac.phase[hi];
+    phase += 360 * Math.round((nearest - phase) / 360);
+    res.phaseAtFc = phase;
   }
   let k = 0;
   for (let i = 1; i < ac.mag.length; i++) if (ac.mag[i] > ac.mag[k]) k = i;

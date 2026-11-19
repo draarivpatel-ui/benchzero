@@ -158,6 +158,7 @@ export function compile(circuit) {
   let groundUsed = false;
   const prepared = [];
   for (const p of parts) {
+    if (!p || typeof p !== 'object') return fail('BAD_PART', 'A part entry is null or invalid.');
     const spec = PART_TYPES[p.type];
     if (!spec) return fail('BAD_PART', `Unknown part type "${p.type}".`, { part: p.id });
     if (!ID_RE.test(p.id || '')) return fail('BAD_PART', `Bad part id "${p.id}".`);
@@ -511,16 +512,36 @@ export function transient(circuit, opts = {}) {
   const net = c.net;
   const tstop = Number(opts.tstop);
   const dt = Number(opts.dt);
-  if (!(tstop > 0 && dt > 0)) return fail('BAD_SIM', 'Simulation time and step must be positive.');
+  if (!(Number.isFinite(tstop) && Number.isFinite(dt) && tstop > 0 && dt > 0)) {
+    return fail('BAD_SIM', 'Simulation time and step must be finite positive numbers.');
+  }
   const steps = Math.round(tstop / dt);
   if (steps < 4) return fail('BAD_SIM', 'The window holds fewer than 4 time steps.');
   if (steps > MAX_SAMPLES) return fail('BAD_SIM', `At most ${MAX_SAMPLES} time steps (asked for ${steps}). Raise the step or shorten the window.`);
   const method = opts.method === 'be' ? 'be' : 'trap';
 
-  // Breakpoints from every source, merged and sorted.
-  let bps = [];
-  for (const p of net.parts) if (p.type === 'V') bps.push(...waveBreakpoints(p.wave, tstop));
-  bps = [...new Set(bps.map((v) => +v.toPrecision(15)))].sort((a, b) => a - b);
+  // Breakpoints from every source, merged and sorted. Use iterative accumulation instead of
+  // spread so a large edge list cannot overflow the JavaScript argument stack.
+  const bps = [];
+  for (const p of net.parts) {
+    if (p.type === 'V') {
+      const edges = waveBreakpoints(p.wave, tstop);
+      for (let i = 0; i < edges.length; i++) bps.push(edges[i]);
+    }
+  }
+  // A huge number of internal edges would take too long; return a useful sampling error.
+  if (bps.length > 200000) {
+    return fail('BAD_SIM', `Too many source edges (${bps.length}). Widen the step or shorten the window.`);
+  }
+  const seen = new Set();
+  const unique = [];
+  for (let i = 0; i < bps.length; i++) {
+    const key = +bps[i].toPrecision(15);
+    if (!seen.has(key)) { seen.add(key); unique.push(key); }
+  }
+  bps.length = 0;
+  for (let i = 0; i < unique.length; i++) bps.push(unique[i]);
+  bps.sort((a, b) => a - b);
 
   // Operating point at t = 0- (before any edge at t = 0).
   const op = dcSolve(net, 0, -1);
@@ -655,7 +676,13 @@ export function acSweep(circuit, opts = {}) {
   const op = dcSolve(net, null, -1);
   if (!op.ok) return op;
   const lin = op.lin;
-  const freqs = Float64Array.from(opts.freqs || []);
+  const rawFreqs = opts.freqs || [];
+  for (let i = 0; i < rawFreqs.length; i++) {
+    if (!Number.isFinite(rawFreqs[i]) || rawFreqs[i] <= 0) {
+      return fail('BAD_AC', 'AC sweep frequencies must be finite positive numbers.');
+    }
+  }
+  const freqs = Float64Array.from(rawFreqs);
   const n = net.size;
   const Ar = new Float64Array(n * n);
   const Ai = new Float64Array(n * n);
@@ -712,6 +739,9 @@ export function acSweep(circuit, opts = {}) {
 
 /** Log-spaced frequencies from fstart to fstop with ppd points per decade. */
 export function logFreqs(fstart, fstop, ppd = 40) {
+  if (!(Number.isFinite(fstart) && Number.isFinite(fstop) && fstart > 0 && fstop > fstart)) {
+    return new Float64Array(0);
+  }
   const a = Math.log10(fstart);
   const b = Math.log10(fstop);
   const n = Math.max(2, Math.round((b - a) * ppd) + 1);
