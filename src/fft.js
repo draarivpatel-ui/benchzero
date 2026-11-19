@@ -36,13 +36,13 @@ export function fft(re, im) {
   }
 }
 
-export function prevPow2(n) {
+function prevPow2(n) {
   let p = 1;
   while (p * 2 <= n) p *= 2;
   return p;
 }
 
-export function hann(n) {
+function hann(n) {
   const w = new Float64Array(n);
   for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
   return w;
@@ -151,7 +151,7 @@ export function spectrumCoherent(signal, fs, i0, len, opts = {}) {
 }
 
 /** Largest non-DC bin, refined by parabolic interpolation on the log magnitude. */
-export function findPeak(amp, binHz) {
+function findPeak(amp, binHz) {
   let k = -1;
   let best = 0;
   // Include bin 1: a low-frequency tone can occupy the first bin and must not be

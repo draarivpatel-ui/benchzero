@@ -3,9 +3,9 @@
 
 import { normalizeWave, waveValue, waveDC, waveBreakpoints } from './waves.js';
 
-export const VT = 0.02585; // thermal voltage at about 300 K (V)
-export const GMIN = 1e-12; // conductance across every diode junction (S)
-export const GMIN_CAP = 1e-9; // tie to ground for nodes reached only through capacitors (S)
+const VT = 0.02585; // thermal voltage at about 300 K (V)
+const GMIN = 1e-12; // conductance across every diode junction (S)
+const GMIN_CAP = 1e-9; // tie to ground for nodes reached only through capacitors (S)
 const MAX_EXP = 80; // diode exponent cap; the curve is continued linearly above it
 const MAX_PARTS = 40;
 const MAX_SAMPLES = 20000;
@@ -19,7 +19,7 @@ export const PART_TYPES = {
   OPAMP: { pins: 3, label: 'Op-amp', unit: '' },
 };
 
-export const DIODE_MODELS = {
+const DIODE_MODELS = {
   si: { is: 1e-14, n: 1, label: 'Silicon' },
   led: { is: 1e-18, n: 2, label: 'Red LED' },
 };
@@ -79,7 +79,7 @@ export function solveDense(A, b, n) {
 }
 
 /** Complex version of solveDense with separate real and imaginary arrays. */
-export function solveDenseComplex(Ar, Ai, br, bi, n) {
+function solveDenseComplex(Ar, Ai, br, bi, n) {
   let scale = 0;
   for (let i = 0; i < n * n; i++) scale = Math.max(scale, Math.hypot(Ar[i], Ai[i]));
   if (!(scale > 0)) return { ok: false, row: 0 };
@@ -147,7 +147,7 @@ export function solveDenseComplex(Ar, Ai, br, bi, n) {
  * Check a circuit and build the index maps the solver needs.
  * Returns { ok: true, net } or { ok: false, error }.
  */
-export function compile(circuit) {
+function compile(circuit) {
   if (!circuit || !Array.isArray(circuit.parts)) return fail('BAD_CIRCUIT', 'Circuit has no parts list.');
   const parts = circuit.parts;
   if (parts.length === 0) return fail('EMPTY', 'Add at least one part.');

@@ -130,7 +130,7 @@ export function computeLab(circuit) {
  * Refine the -3 dB crossing and the resonant peak of a sweep by re-solving the AC system at
  * single frequencies (bisection for the crossing, golden-section search for the peak).
  */
-export function refineAC(circuit, ac, source, out) {
+function refineAC(circuit, ac, source, out) {
   const at = (f) => {
     const r = acSweep(circuit, { source, out, freqs: [f] });
     return r.ok ? r.mag[0] : NaN;

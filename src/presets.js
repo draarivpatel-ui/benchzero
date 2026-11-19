@@ -14,7 +14,7 @@ const near = (a, b, pct) => Number.isFinite(a) && Math.abs(a - b) <= Math.abs(b)
  * be marked Done. This catches, for example, a parallel feedback resistor that silently
  * changes the amplifier gain while the component-ratio formula still says -22.
  */
-export function topologyIntact(ctx, expected) {
+function topologyIntact(ctx, expected) {
   const parts = ctx.circuit && ctx.circuit.parts;
   if (!Array.isArray(parts) || parts.length !== expected.length) return false;
   const byId = Object.create(null);
@@ -267,7 +267,7 @@ export const PRESETS = [
   },
 ];
 
-export function presetById(id) {
+function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
 }
 

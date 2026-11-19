@@ -4,7 +4,7 @@
 import { formatSI } from './units.js';
 import { roundRect } from './schematic.js';
 
-export const C = {
+const C = {
   bg: '#060a0e',
   grid: 'rgba(120, 144, 168, 0.16)',
   gridStrong: 'rgba(120, 144, 168, 0.34)',
@@ -23,7 +23,7 @@ const DIV_X = 10;
 const DIV_Y = 8;
 
 /** Smallest 1-2-5 step that is at least x. */
-export function niceStep(x) {
+function niceStep(x) {
   if (!(x > 0) || !Number.isFinite(x)) return 1;
   const e = Math.floor(Math.log10(x));
   const b = x / 10 ** e;
@@ -32,7 +32,7 @@ export function niceStep(x) {
 }
 
 /** Vertical scale for a trace: units per division and the division where zero sits. */
-export function autoScale(arr) {
+function autoScale(arr) {
   let mn = Infinity;
   let mx = -Infinity;
   for (let i = 0; i < arr.length; i++) { const v = arr[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
