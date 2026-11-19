@@ -1,4 +1,4 @@
-// BenchZero engine tests. Run with: node --test tests/
+// BenchZero engine tests. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
