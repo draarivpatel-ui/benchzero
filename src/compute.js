@@ -26,8 +26,13 @@ function steadyStart(tran, circuit) {
 
 export function computeLab(circuit) {
   const t0 = now();
+  const warnings = [];
+  const addWarning = (w) => {
+    if (w && w.code && !warnings.some((x) => x.code === w.code)) warnings.push(w);
+  };
   const tran = transient(circuit, circuit.sim || {});
   if (!tran.ok) return { ok: false, error: tran.error, ms: now() - t0 };
+  for (const w of tran.warnings || []) addWarning(w);
   const fs = 1 / tran.dt;
   const probes = circuit.probes || {};
   const i0 = steadyStart(tran, circuit);
@@ -87,6 +92,7 @@ export function computeLab(circuit) {
       if (ac.ok) {
         ac.source = src.id;
         ac.refined = refineAC(circuit, ac, src.id, out);
+        for (const w of ac.warnings || []) addWarning(w);
       }
       ac.out = out;
     }
@@ -122,6 +128,7 @@ export function computeLab(circuit) {
     math,
     verify: ver,
     bodeTheory,
+    warnings,
     timing: { tran: tran.stats.ms, ac: ac && ac.ok ? ac.ms : 0, theory: now() - tv, total: now() - t0 },
   };
 }

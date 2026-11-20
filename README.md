@@ -18,6 +18,7 @@ Most students meet circuits as equations on paper. A real bench (function genera
 - **Sonification.** Press `S` to hear the CH1 trace as pitch (220 Hz at its lowest voltage, 880 Hz at its highest, panned left to right over 3 seconds), so RC charging, RLC ringing and diode clipping can be heard as well as seen.
 - **Acoustic lab.** A stepped sine sweep from 100 Hz to 10 kHz played through the speakers and measured with the microphone. If there is no microphone or permission is refused, it runs a silent simulated loopback and every screen says SIMULATED.
 - **Share links.** One click copies a URL whose `#lab=` hash rebuilds the circuit, layout, probes and timebase with full numeric precision. All five labs encode in under 400 bytes, and decoding validates every field, bounds coordinates and rejects reserved node names.
+- **Fault injection.** Open or short any part from its inspector and the schematic tags it, the parts chip turns red, and a fault strip keeps a Restore button even after the part has been removed. Shorts use a milliohm resistor so every fault still solves. The verification panel explains the fault, and challenge grading pauses until the part is restored, so a shorted load cannot pass a challenge by accident.
 - **Offline and private.** A service worker caches the app, the lab autosaves to `localStorage`, and nothing leaves the browser.
 
 ## Measured accuracy
@@ -40,7 +41,7 @@ Other checks from the same run.
 - Rectifier peak diode drop 0.726 V. Newton-Raphson took 21,675 iterations over 10,000 steps, at most 5 in one step.
 - Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD. THD is withheld with a clear reason when the window has too few cycles or the drive is non-periodic.
 - The op-amp Math trace plots output-port power, V(out) times I(out): 2.499 mW peak in lab 4. Supply consumption cannot be inferred from the three-pin model.
-- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 39 tests and passes with zero dependencies.
+- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 75 tests and passes with zero dependencies.
 
 The rectifier model is the textbook ideal-switch analysis with a Shockley forward drop. It is labelled approximate in the app and its 0.59 % RMSE is reported as is.
 
@@ -73,7 +74,7 @@ tests/engine.test.mjs       node:test suite, no dependencies
 
 ### Solver details
 
-- **MNA.** Unknowns are the non-ground node voltages plus one branch current per voltage source, inductor and op-amp output. The system is dense `Float64Array` and solved by Gaussian elimination with partial pivoting. A pivot below `1e-14` of the matrix scale is reported as a singular circuit (for example two voltage sources in parallel), never as `NaN`.
+- **MNA.** Unknowns are the non-ground node voltages plus one branch current per voltage source, inductor and op-amp output. The system is dense `Float64Array` and solved by Gaussian elimination with scaled partial pivoting. Pivots are judged relative to the largest entry in their own row, so a legitimately small pivot (a 1 mOhm short, a 1 GOhm DC tie, a stiff source branch) still solves. A pivot ratio below `1e-14` is a real singular circuit (for example two voltage sources in parallel), never `NaN`; a ratio below `1e-10` solves but raises a near-singular warning in the verify panel and marks the timing readout, because the last digits are not trustworthy.
 - **Topology checks first.** A union-find pass reports nodes with no path to ground (`FLOATING_NODE`, with the node names), a missing ground, shorted parts and bad values before any matrix is built. Nodes that reach ground only through capacitors get a 1 GOhm tie so their DC level is defined.
 - **Companion models.** Trapezoidal by default (`G = 2C/h`, `Z = 2L/h`), backward Euler selectable.
 - **Exact source edges.** Step and square sources expose their edge times. The solver steps exactly to each edge using the source's left limit, then takes a tiny backward-Euler step (1e-6 of dt) with capacitor voltages and inductor currents held, which gives the correct state just after the edge. Plain trapezoidal integration would shift a step by half a time step.

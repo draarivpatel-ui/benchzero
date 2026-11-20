@@ -120,6 +120,16 @@ button, input, select { font: inherit; color: inherit; }
 .btn-accent { border-color: rgba(34, 211, 238, 0.5); background: linear-gradient(180deg, rgba(34, 211, 238, 0.2), rgba(34, 211, 238, 0.06)); }
 .btn-icon { width: 34px; justify-content: center; padding: 7px 0; font-family: var(--mono); }
 .btn-small { padding: 4px 10px; font-size: 12px; }
+/* Secondary actions stay legible but stop competing with the lab and the Copy Lab Link button. */
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.btn-quiet:hover { border-color: var(--bezel); background: #111820; color: var(--ink); }
+.btn-quiet[aria-pressed='true'] { color: var(--math); border-color: rgba(167, 139, 250, 0.5); background: rgba(167, 139, 250, 0.12); }
 
 /* ---------------- bench grid ---------------- */
 .bench {
@@ -148,21 +158,22 @@ button, input, select { font: inherit; color: inherit; }
   pointer-events: none;
   background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 3px);
 }
-.schem { grid-column: span 5; }
-.scopep { grid-column: span 7; }
+.schem { grid-column: span 4; }
+.scopep { grid-column: span 8; }
 .insp, .verify, .guide { grid-column: span 4; }
 
 .panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 10px 12px 8px;
+  padding: 11px 12px 9px;
   flex-wrap: wrap;
+  border-bottom: 1px solid #1a232e;
 }
 .panel h2 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--ink);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.005em;
 }
 .add { display: flex; gap: 4px; flex-wrap: wrap; }
 .chip {
@@ -176,10 +187,10 @@ button, input, select { font: inherit; color: inherit; }
 }
 .chip:hover { color: var(--ink); border-color: #3a4858; }
 
-.canvas-wrap { position: relative; margin: 0 12px; border-radius: 8px; overflow: hidden; border: 1px solid #1c2531; }
-.schem-wrap { height: clamp(300px, 46vh, 520px); background: radial-gradient(120% 120% at 50% 0%, #0f161e, #0a0f15); }
+.canvas-wrap { position: relative; margin: 12px 12px 0; border-radius: 8px; overflow: hidden; border: 1px solid #1c2531; }
+.schem-wrap { height: clamp(330px, 50vh, 540px); background: radial-gradient(120% 120% at 50% 0%, #0f161e, #0a0f15); }
 .scope-wrap {
-  height: clamp(300px, 46vh, 520px);
+  height: clamp(330px, 50vh, 540px);
   background: #060a0e;
   box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.05), inset 0 0 40px rgba(0, 0, 0, 0.8);
 }
@@ -196,6 +207,39 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   cursor: pointer;
 }
 .part-chip[aria-selected='true'] { color: #001018; background: var(--ch1); border-color: var(--ch1); }
+.part-chip.faulted { border-color: rgba(248, 113, 113, 0.7); color: #fecaca; }
+.part-chip.faulted[aria-selected='true'] { background: var(--bad); color: #1b0508; }
+
+/* Active fault strip, kept visible so an opened part is always recoverable. */
+.faults { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 12px; }
+.fault-item {
+  display: inline-flex; align-items: center; gap: 0;
+  border: 1px solid rgba(248, 113, 113, 0.55); border-radius: 999px; overflow: hidden;
+  background: rgba(248, 113, 113, 0.08);
+}
+.fault-chip { font: 700 11px var(--mono); color: #fecaca; padding: 3px 9px; }
+.fault-restore {
+  border: 0; border-left: 1px solid rgba(248, 113, 113, 0.4);
+  background: transparent; color: #fecaca; cursor: pointer;
+  font: 600 11px var(--sans); padding: 3px 9px;
+}
+.fault-restore:hover { background: rgba(248, 113, 113, 0.2); }
+.fault-banner {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.5); background: rgba(248, 113, 113, 0.08);
+  font-size: 12px; color: var(--ink-2);
+}
+.fault-banner strong { font: 700 11px var(--mono); color: #fecaca; }
+.fault-hint { margin: 0; font-size: 12px; color: #fecaca; }
+.notice {
+  display: grid; gap: 3px;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.07);
+  font-size: 12px; color: var(--ink-2);
+}
+.notice strong { font: 700 11px var(--mono); color: #fbbf24; }
+.drive-btn { justify-content: center; }
 
 /* ---------------- scope header and telemetry ---------------- */
 .scope-head { gap: 8px 12px; }
@@ -236,7 +280,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .tm .v {
   display: block;
   font-family: var(--seg);
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1.15;
   color: var(--ch1);
   white-space: normal;
@@ -246,6 +290,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 }
 #m-rmse { color: var(--theory); text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
 #m-ms { color: var(--ink-2); text-shadow: none; }
+#m-ms.warn { color: #fbbf24; }
 
 /* ---------------- inspector ---------------- */
 .insp-body { padding: 2px 12px 8px; display: grid; gap: 10px; }
@@ -307,6 +352,8 @@ input[type='range'] { width: 100%; accent-color: var(--ch1); }
 }
 .challenges li.done { border-color: rgba(16, 185, 129, 0.45); color: var(--ink); }
 .challenges li.done::before { content: '\2713'; color: #021a12; background: var(--theory); border-color: var(--theory); }
+.challenges li.paused { grid-template-columns: 1fr; border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.05); }
+.challenges li.paused::before { content: none; display: none; }
 
 /* ---------------- dialog and toast ---------------- */
 dialog {
@@ -344,12 +391,14 @@ kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 
   .actions { width: 100%; }
   .actions .btn { flex: 1 1 auto; justify-content: center; }
   .actions .btn-icon { flex: 0 0 40px; }
-  .canvas-wrap { margin: 0 10px; }
-  .schem-wrap { height: 300px; }
-  .scope-wrap { height: 300px; }
+  .canvas-wrap { margin: 10px 10px 0; }
+  .schem-wrap { height: 320px; }
+  .scope-wrap { height: 320px; }
   .telemetry { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 10px; }
-  .tm .v { font-size: 16px; }
-  .wordmark { font-size: 21px; }
+  .tm .v { font-size: 17px; }
+  .wordmark { font-size: 22px; }
+  .fault-banner { grid-template-columns: auto 1fr; }
+  .fault-banner .btn { grid-column: 1 / -1; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }

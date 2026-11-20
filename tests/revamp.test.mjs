@@ -6,7 +6,7 @@ import { acSweep, transient, dcOperatingPoint } from '../src/mna.js';
 import { verify } from '../src/theory.js';
 import { computeLab } from '../src/compute.js';
 import { presetCircuit } from '../src/presets.js';
-import { applyFault, FAULTS } from '../src/faults.js';
+import { applyFault, FAULTS, SHORT_VALUE } from '../src/faults.js';
 
 test('Wave 1: verify reports an explicit pass for every guided lab', () => {
   for (const id of ['rc', 'rlc', 'rect', 'inv', 'div']) {
@@ -53,7 +53,7 @@ test('Wave 1: fault helper opens and shorts a part without mutating the original
   const r = shorted.parts.find((p) => p.id === 'R1');
   assert.ok(r, 'shorted part must remain');
   assert.equal(r.type, 'R');
-  assert.ok(r.value <= 1e-9, `shorted resistor value ${r.value}`);
+  assert.equal(r.value, SHORT_VALUE, 'a short must be the milliohm value the solver can solve');
   assert.throws(() => applyFault(c, 'NOPE', 'open'));
   assert.throws(() => applyFault(c, 'R1', 'bogus'));
   assert.deepEqual(FAULTS, ['open', 'short']);
@@ -64,15 +64,12 @@ test('Wave 1: fault injection produces a solvable circuit', () => {
   const opened = applyFault(c, 'C1', 'open');
   // Removing C leaves in still connected to out through R; out is now a dangling-ish node but R connects in-out, out has no ground path? Actually out only via R to in, in via V to ground -> connected. Should solve.
   const tr = transient(opened, opened.sim);
-  // May or may not solve depending on topology; assert no NaN if it does.
-  if (tr.ok) {
-    for (const arr of Object.values(tr.nodes)) for (const v of arr) assert.ok(Number.isFinite(v));
-  }
+  assert.ok(tr.ok, tr.error && tr.error.message);
+  for (const arr of Object.values(tr.nodes)) for (const v of arr) assert.ok(Number.isFinite(v));
   const shorted = applyFault(c, 'R1', 'short');
   const tr2 = transient(shorted, shorted.sim);
-  if (tr2.ok) {
-    for (const arr of Object.values(tr2.nodes)) for (const v of arr) assert.ok(Number.isFinite(v));
-  }
+  assert.ok(tr2.ok, tr2.error && tr2.error.message);
+  for (const arr of Object.values(tr2.nodes)) for (const v of arr) assert.ok(Number.isFinite(v));
 });
 
 test('Wave 1: backward Euler transient solves the RC lab', () => {
@@ -108,20 +105,28 @@ test('Wave 1: fault on a voltage source replaces it with a resistor', () => {
   const f = applyFault(c, 'V1', 'short');
   const p = f.parts.find((x) => x.id === 'V1');
   assert.equal(p.type, 'R');
-  assert.ok(p.value <= 1e-9);
+  assert.equal(p.value, SHORT_VALUE);
 });
 
 test('Wave 1: verify.pass is false when RMSE is huge', () => {
-  // Tamper a result by using a mismatched circuit? Instead check pass field exists on a real result.
+  // Grade the healthy RC trace against a circuit whose theory is 1000x slower: real, huge RMSE.
   const c = presetCircuit('rc');
   const lab = computeLab(c);
   assert.equal(lab.verify.pass, true);
   assert.ok(Number.isFinite(lab.verify.rmsePct));
+  const wrong = presetCircuit('rc');
+  wrong.parts[1].value = 1e6;
+  const v = verify(wrong, lab.tran, lab.ac);
+  assert.ok(v.ok);
+  assert.ok(v.rmsePct > 10, `expected a huge RMSE, got ${v.rmsePct}`);
+  assert.equal(v.pass, false);
 });
 
-test('Wave 1: ill-conditioned flag present on solveDense result', () => {
+test('Wave 1: a genuinely singular matrix is reported, never solved silently', () => {
   const A = Float64Array.from([4, 2, 2, 1]);
   const b = Float64Array.from([1, 1]);
   const r = solveDense(A, b, 2);
-  assert.ok('illConditioned' in r);
+  assert.equal(r.ok, false);
+  assert.equal(r.illConditioned, true);
+  assert.equal(typeof r.row, 'number');
 });

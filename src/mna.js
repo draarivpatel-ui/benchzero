@@ -35,36 +35,58 @@ function fail(code, message, extra = {}) {
 /* Dense linear algebra                                                */
 /* ------------------------------------------------------------------ */
 
+/** A pivot ratio below this is treated as a singular circuit, not just a stiff one. */
+const SINGULAR_RATIO = 1e-14;
+/** A smallest-to-largest pivot ratio below this flags an ill-conditioned but solvable system. */
+export const ILL_CONDITION_RATIO = 1e-10;
+
 /**
- * Solve A x = b in place with Gaussian elimination and partial pivoting.
+ * Solve A x = b in place with Gaussian elimination and scaled partial pivoting.
  * A is an n*n row-major Float64Array, b a Float64Array of length n.
- * Returns { ok: true, x } or { ok: false, row } when a pivot is negligible.
+ *
+ * Pivots are chosen and judged relative to the largest entry in their own row. A global
+ * threshold misreads a legitimately small pivot (a 1 mOhm short, a 1 GOhm DC tie, a stiff
+ * source branch) as a singular circuit, which used to fail a shorted resistor outright.
+ * Returns { ok: true, x, illConditioned, cond } or { ok: false, row, illConditioned, cond }.
  */
 export function solveDense(A, b, n) {
+  if (!(n > 0)) return { ok: false, row: 0, illConditioned: false, cond: 0 };
   let scale = 0;
   for (let i = 0; i < n * n; i++) scale = Math.max(scale, Math.abs(A[i]));
-  if (!(scale > 0)) return { ok: false, row: 0, illConditioned: false };
-  const tol = 1e-14 * scale;
-  let minPivot = Infinity;
-  let maxPivot = 0;
+  if (!(scale > 0)) return { ok: false, row: 0, illConditioned: false, cond: 0 };
+  const rowScale = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let m = 0;
+    for (let j = 0; j < n; j++) m = Math.max(m, Math.abs(A[i * n + j]));
+    rowScale[i] = m;
+  }
+  let minRatio = Infinity;
+  let maxRatio = 0;
   for (let k = 0; k < n; k++) {
-    let p = k;
-    let best = Math.abs(A[k * n + k]);
-    for (let i = k + 1; i < n; i++) {
+    let p = -1;
+    let best = 0;
+    let bestRatio = 0;
+    for (let i = k; i < n; i++) {
+      const s = rowScale[i];
+      if (!(s > 0)) continue;
       const v = Math.abs(A[i * n + k]);
-      if (v > best) { best = v; p = i; }
+      const ratio = v / s;
+      if (ratio > bestRatio) { bestRatio = ratio; best = v; p = i; }
     }
-    if (!(best > tol)) return { ok: false, row: k, illConditioned: true };
+    if (p < 0 || !(bestRatio > SINGULAR_RATIO)) {
+      return { ok: false, row: k, illConditioned: true, cond: 0 };
+    }
     if (p !== k) {
       for (let j = 0; j < n; j++) {
         const t = A[k * n + j]; A[k * n + j] = A[p * n + j]; A[p * n + j] = t;
       }
+      const rs = rowScale[k]; rowScale[k] = rowScale[p]; rowScale[p] = rs;
       const t = b[k]; b[k] = b[p]; b[p] = t;
     }
     const piv = A[k * n + k];
-    const ap = Math.abs(piv);
-    if (ap < minPivot) minPivot = ap;
-    if (ap > maxPivot) maxPivot = ap;
+    const ratio = Math.abs(piv) / rowScale[k];
+    if (ratio < minRatio) minRatio = ratio;
+    if (ratio > maxRatio) maxRatio = ratio;
     for (let i = k + 1; i < n; i++) {
       const f = A[i * n + k] / piv;
       if (f === 0) continue;
@@ -79,35 +101,52 @@ export function solveDense(A, b, n) {
     for (let j = i + 1; j < n; j++) s -= A[i * n + j] * x[j];
     x[i] = s / A[i * n + i];
   }
-  for (let i = 0; i < n; i++) if (!Number.isFinite(x[i])) return { ok: false, row: i, illConditioned: true };
-  const condEstimate = maxPivot > 0 ? minPivot / maxPivot : 0;
-  return { ok: true, x, illConditioned: condEstimate < 1e-10 };
+  const cond = maxRatio > 0 ? Math.min(1, minRatio / maxRatio) : 0;
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(x[i])) return { ok: false, row: i, illConditioned: true, cond };
+  }
+  return { ok: true, x, illConditioned: cond < ILL_CONDITION_RATIO, cond };
 }
 
-/** Complex version of solveDense with separate real and imaginary arrays. */
+/** Complex version of solveDense, same scaled partial pivoting and conditioning report. */
 export function solveDenseComplex(Ar, Ai, br, bi, n) {
   let scale = 0;
   for (let i = 0; i < n * n; i++) scale = Math.max(scale, Math.hypot(Ar[i], Ai[i]));
-  if (!(scale > 0)) return { ok: false, row: 0 };
-  const tol = 1e-14 * scale;
+  if (!(scale > 0)) return { ok: false, row: 0, illConditioned: false, cond: 0 };
+  const rowScale = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let m = 0;
+    for (let j = 0; j < n; j++) m = Math.max(m, Math.hypot(Ar[i * n + j], Ai[i * n + j]));
+    rowScale[i] = m;
+  }
+  let minRatio = Infinity;
+  let maxRatio = 0;
   for (let k = 0; k < n; k++) {
-    let p = k;
-    let best = Math.hypot(Ar[k * n + k], Ai[k * n + k]);
-    for (let i = k + 1; i < n; i++) {
-      const v = Math.hypot(Ar[i * n + k], Ai[i * n + k]);
-      if (v > best) { best = v; p = i; }
+    let p = -1;
+    let bestRatio = 0;
+    for (let i = k; i < n; i++) {
+      const s = rowScale[i];
+      if (!(s > 0)) continue;
+      const ratio = Math.hypot(Ar[i * n + k], Ai[i * n + k]) / s;
+      if (ratio > bestRatio) { bestRatio = ratio; p = i; }
     }
-    if (!(best > tol)) return { ok: false, row: k };
+    if (p < 0 || !(bestRatio > SINGULAR_RATIO)) {
+      return { ok: false, row: k, illConditioned: true, cond: 0 };
+    }
     if (p !== k) {
       for (let j = 0; j < n; j++) {
         let t = Ar[k * n + j]; Ar[k * n + j] = Ar[p * n + j]; Ar[p * n + j] = t;
         t = Ai[k * n + j]; Ai[k * n + j] = Ai[p * n + j]; Ai[p * n + j] = t;
       }
+      const rs = rowScale[k]; rowScale[k] = rowScale[p]; rowScale[p] = rs;
       let t = br[k]; br[k] = br[p]; br[p] = t;
       t = bi[k]; bi[k] = bi[p]; bi[p] = t;
     }
     const pr = Ar[k * n + k];
     const pi = Ai[k * n + k];
+    const ratio = Math.hypot(pr, pi) / rowScale[k];
+    if (ratio < minRatio) minRatio = ratio;
+    if (ratio > maxRatio) maxRatio = ratio;
     const d = pr * pr + pi * pi;
     for (let i = k + 1; i < n; i++) {
       const ar = Ar[i * n + k];
@@ -126,6 +165,7 @@ export function solveDenseComplex(Ar, Ai, br, bi, n) {
       bi[i] -= fr * bi[k] + fi * br[k];
     }
   }
+  const cond = maxRatio > 0 ? Math.min(1, minRatio / maxRatio) : 0;
   const xr = new Float64Array(n);
   const xi = new Float64Array(n);
   for (let i = n - 1; i >= 0; i--) {
@@ -141,8 +181,12 @@ export function solveDenseComplex(Ar, Ai, br, bi, n) {
     xr[i] = (sr * pr + si * pi) / d;
     xi[i] = (si * pr - sr * pi) / d;
   }
-  for (let i = 0; i < n; i++) if (!Number.isFinite(xr[i]) || !Number.isFinite(xi[i])) return { ok: false, row: i };
-  return { ok: true, xr, xi };
+  for (let i = 0; i < n; i++) {
+    if (!Number.isFinite(xr[i]) || !Number.isFinite(xi[i])) {
+      return { ok: false, row: i, illConditioned: true, cond };
+    }
+  }
+  return { ok: true, xr, xi, illConditioned: cond < ILL_CONDITION_RATIO, cond };
 }
 
 /* ------------------------------------------------------------------ */
@@ -366,8 +410,9 @@ function initialLin(net) {
 }
 
 /**
- * Newton-Raphson solve at one time point. Returns { ok, x, iters } or a structured failure.
- * For linear circuits this is a single direct solve.
+ * Newton-Raphson solve at one time point. Returns { ok, x, iters, cond } or a structured failure.
+ * For linear circuits this is a single direct solve. `cond` is the smallest pivot ratio seen, so a
+ * stiff but solvable system (a near-zero ohm short) can be reported instead of failing silently.
  */
 function newton(net, ctx, x0, maxIter = 150) {
   const n = net.size;
@@ -375,16 +420,18 @@ function newton(net, ctx, x0, maxIter = 150) {
   const b = new Float64Array(n);
   const lin = ctx.lin;
   let x = x0 ? Float64Array.from(x0) : new Float64Array(n);
+  let cond = 1;
   // Start each device's linearization point from the previous solution when we have one.
   if (x0) for (const p of net.parts) setLinFromX(p, x, lin, true);
   for (let it = 1; it <= maxIter; it++) {
     assemble(net, ctx, A, b);
     const r = solveDense(A, b, n);
     if (!r.ok) {
-      return fail('SINGULAR_MATRIX', singularMessage(net, r.row), { row: r.row });
+      return fail('SINGULAR_MATRIX', singularMessage(net, r.row), { row: r.row, illConditioned: !!r.illConditioned });
     }
+    if (Number.isFinite(r.cond) && r.cond < cond) cond = r.cond;
     const xn = r.x;
-    if (!net.nonlinear) return { ok: true, x: xn, iters: 1 };
+    if (!net.nonlinear) return { ok: true, x: xn, iters: 1, cond };
     let converged = true;
     for (let i = 0; i < n; i++) {
       const tol = 1e-9 + 1e-7 * Math.abs(xn[i]);
@@ -394,7 +441,7 @@ function newton(net, ctx, x0, maxIter = 150) {
       if (setLinFromX(p, xn, lin, false)) converged = false;
     }
     x = xn;
-    if (converged && it > 1) return { ok: true, x, iters: it };
+    if (converged && it > 1) return { ok: true, x, iters: it, cond };
   }
   return fail('NO_CONVERGENCE', 'Newton-Raphson did not converge. Try a smaller time step or gentler source.');
 }
@@ -437,6 +484,16 @@ function singularMessage(net, row) {
   const p = net.parts.find((q) => q.br === row);
   if (p) return `The circuit equations are singular at ${p.id}. A loop made only of voltage sources and inductors has no unique current.`;
   return 'The circuit equations are singular.';
+}
+
+/** A readable, structured warning for a stiff but solvable matrix. */
+export function conditionWarning(cond) {
+  const ratio = Number.isFinite(cond) && cond > 0 ? cond : 0;
+  return {
+    code: 'ILL_CONDITIONED',
+    cond: ratio,
+    message: `Near-singular matrix (smallest pivot ratio ${ratio.toExponential(1)}). A part value is far outside the usual range or shorts a stiff node, so the last digits are not trustworthy. Open or restore the part, or widen the value.`,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -491,7 +548,8 @@ export function dcOperatingPoint(circuit) {
   const r = dcSolve(net, null, -1);
   if (!r.ok) return r;
   const out = readout(net, r.x, null);
-  return { ok: true, nodes: out.v, currents: out.i, iters: r.iters, notes: notesFor(net) };
+  const warnings = Number.isFinite(r.cond) && r.cond < ILL_CONDITION_RATIO ? [conditionWarning(r.cond)] : [];
+  return { ok: true, nodes: out.v, currents: out.i, iters: r.iters, cond: r.cond, warnings, notes: notesFor(net) };
 }
 
 function notesFor(net) {
@@ -570,6 +628,7 @@ export function transient(circuit, opts = {}) {
   let newtonIters = 0;
   let maxIters = 0;
   let edges = 0;
+  let cond = Number.isFinite(op.cond) ? op.cond : 1;
   const ctx = { mode: method, h: dt, t: 0, side: 1, scale: 1, lin, state };
 
   const commit = (xn, mode, h) => {
@@ -593,6 +652,7 @@ export function transient(circuit, opts = {}) {
     if (!r.ok) return r;
     newtonIters += r.iters;
     if (r.iters > maxIters) maxIters = r.iters;
+    if (Number.isFinite(r.cond) && r.cond < cond) cond = r.cond;
     commit(r.x, mode, h);
     x = r.x;
     return r;
@@ -654,6 +714,8 @@ export function transient(circuit, opts = {}) {
     nodes,
     currents,
     nodeNames: net.nodeNames.slice(),
+    cond,
+    warnings: cond < ILL_CONDITION_RATIO ? [conditionWarning(cond)] : [],
     stats: { steps, edges, newtonIters, maxIters, method, ms: nowMs() - t0 },
     notes: notesFor(net),
   };
@@ -679,16 +741,20 @@ export function acSweep(circuit, opts = {}) {
   if (outIx === undefined) return fail('BAD_AC', `Unknown output node ${opts.out}.`);
   const refIx = !opts.ref || opts.ref === '0' ? -1 : net.nodeIndex.get(opts.ref);
   if (refIx === undefined) return fail('BAD_AC', `Unknown reference node ${opts.ref}.`);
-  const op = dcSolve(net, null, -1);
-  if (!op.ok) return op;
-  const lin = op.lin;
-  const rawFreqs = opts.freqs || [];
-  if (!rawFreqs || (typeof rawFreqs.length !== 'number') || rawFreqs.length === 0) return fail('BAD_AC', 'AC sweep needs at least one frequency.');
+  // Validate the sweep before paying for a DC operating point, so an empty list always reports
+  // the real problem instead of a solve error from a circuit the caller did not mean to analyse.
+  const rawFreqs = opts.freqs;
+  if (!rawFreqs || typeof rawFreqs.length !== 'number' || rawFreqs.length === 0) {
+    return fail('BAD_AC', 'AC sweep needs at least one frequency.');
+  }
   for (let i = 0; i < rawFreqs.length; i++) {
     if (!Number.isFinite(rawFreqs[i]) || rawFreqs[i] <= 0) {
       return fail('BAD_AC', 'AC sweep frequencies must be finite positive numbers.');
     }
   }
+  const op = dcSolve(net, null, -1);
+  if (!op.ok) return op;
+  const lin = op.lin;
   const freqs = Float64Array.from(rawFreqs);
   const n = net.size;
   const Ar = new Float64Array(n * n);
@@ -699,6 +765,7 @@ export function acSweep(circuit, opts = {}) {
   const phase = new Float64Array(freqs.length);
   const re = new Float64Array(freqs.length);
   const im = new Float64Array(freqs.length);
+  let cond = Number.isFinite(op.cond) ? op.cond : 1;
   for (let fi = 0; fi < freqs.length; fi++) {
     const w = 2 * Math.PI * freqs[fi];
     Ar.fill(0); Ai.fill(0); br.fill(0); bi.fill(0);
@@ -730,6 +797,7 @@ export function acSweep(circuit, opts = {}) {
     }
     const r = solveDenseComplex(Ar, Ai, br, bi, n);
     if (!r.ok) return fail('SINGULAR_MATRIX', singularMessage(net, r.row), { freq: freqs[fi] });
+    if (Number.isFinite(r.cond) && r.cond < cond) cond = r.cond;
     const vr = (outIx < 0 ? 0 : r.xr[outIx]) - (refIx < 0 ? 0 : r.xr[refIx]);
     const vi = (outIx < 0 ? 0 : r.xi[outIx]) - (refIx < 0 ? 0 : r.xi[refIx]);
     re[fi] = vr; im[fi] = vi;
@@ -741,7 +809,11 @@ export function acSweep(circuit, opts = {}) {
     while (phase[i] - phase[i - 1] > 180) phase[i] -= 360;
     while (phase[i] - phase[i - 1] < -180) phase[i] += 360;
   }
-  return { ok: true, freqs, mag, phase, re, im, ms: nowMs() - t0 };
+  return {
+    ok: true, freqs, mag, phase, re, im, cond,
+    warnings: cond < ILL_CONDITION_RATIO ? [conditionWarning(cond)] : [],
+    ms: nowMs() - t0,
+  };
 }
 
 /** Log-spaced frequencies from fstart to fstop with ppd points per decade. */

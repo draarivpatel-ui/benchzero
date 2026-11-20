@@ -79,6 +79,7 @@ export class Schematic {
     this.h = handlers;
     this.circuit = null;
     this.selected = null;
+    this.faults = [];
     this.hover = null;
     this.errorNodes = new Set();
     this.tran = null;
@@ -92,6 +93,7 @@ export class Schematic {
   }
 
   setCircuit(circuit) { this.circuit = circuit; this._fit(); }
+  setFaults(list) { this.faults = Array.isArray(list) ? list.slice() : []; }
   setResult(result) {
     this.tran = result && result.ok ? result.tran : null;
     this.errorNodes = new Set(result && !result.ok && result.error && result.error.nodes ? result.error.nodes : []);
@@ -292,6 +294,9 @@ export class Schematic {
     // Parts.
     for (const p of this.circuit.parts) this._part(p);
 
+    // Fault tags sit above the part they describe, red so they read as a bench fault, not a label.
+    for (const f of this.faults || []) this._faultTag(f);
+
     // Current-flow dots along two-terminal parts.
     if (this.tran && k >= 0) {
       for (const p of this.circuit.parts) {
@@ -323,6 +328,38 @@ export class Schematic {
         ctx.setLineDash([]);
       }
     }
+  }
+
+  _faultTag(f) {
+    const ctx = this.ctx;
+    const { u } = this.view;
+    const at = Array.isArray(f.at) ? f.at : [0, 0, 0];
+    const [sx, sy] = this.toPx(at[0], at[1]);
+    const text = f.fault === 'open' ? 'OPEN' : 'SHORT';
+    ctx.save();
+    ctx.font = MONO;
+    ctx.textBaseline = 'middle';
+    const pad = 5;
+    const bw = ctx.measureText(text).width + pad * 2;
+    const bh = 16;
+    const bx = sx + u * 0.55;
+    const by = sy - u * 0.75 - bh / 2;
+    ctx.fillStyle = 'rgba(42, 10, 14, 0.94)';
+    ctx.strokeStyle = COLORS.error;
+    ctx.lineWidth = 1.2;
+    roundRect(ctx, bx, by, bw, bh, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = COLORS.error;
+    ctx.fillText(text, bx + pad, by + bh / 2 + 0.5);
+    // A slash marks the spot even when the part itself has been removed by an open fault.
+    ctx.strokeStyle = COLORS.error;
+    ctx.lineWidth = Math.max(1.6, u * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(sx - u * 0.45, sy + u * 0.45);
+    ctx.lineTo(sx + u * 0.45, sy - u * 0.45);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _ground([x, y], p, i) {

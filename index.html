@@ -22,10 +22,10 @@
     <nav class="presets" aria-label="Guided labs" id="presets"></nav>
     <div class="actions">
       <button type="button" id="btn-run" class="btn" aria-pressed="true" title="Run or pause the sweep (Space)"><span class="ico" aria-hidden="true"></span><span class="lbl">Pause</span></button>
-      <button type="button" id="btn-sonify" class="btn" aria-pressed="false" title="Hear CH1 as pitch (S)">Sonify</button>
-      <button type="button" id="btn-acoustic" class="btn" aria-pressed="false" title="Speaker to microphone response">Acoustic Lab</button>
+      <button type="button" id="btn-sonify" class="btn btn-quiet" aria-pressed="false" title="Hear CH1 as pitch (S)">Sonify</button>
+      <button type="button" id="btn-acoustic" class="btn btn-quiet" aria-pressed="false" title="Speaker to microphone response">Acoustic Lab</button>
       <button type="button" id="btn-share" class="btn btn-accent" title="Copy a link that rebuilds this exact lab">Copy Lab Link</button>
-      <button type="button" id="btn-help" class="btn btn-icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">?</button>
+      <button type="button" id="btn-help" class="btn btn-icon btn-quiet" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">?</button>
     </div>
   </header>
 
@@ -47,6 +47,7 @@
       </div>
       <p id="schem-desc" class="sr-only"></p>
       <div class="parts" id="parts" role="listbox" aria-label="Parts in this circuit"></div>
+      <div class="faults" id="faults" aria-label="Active faults" hidden></div>
     </section>
 
     <section class="panel scopep" aria-labelledby="h-scope">

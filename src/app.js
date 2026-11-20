@@ -4,6 +4,7 @@ import { parseSI, formatSI, toSIInput, logToUnit, unitToLog } from './units.js';
 import { PART_TYPES } from './mna.js';
 import { PRESETS, presetCircuit } from './presets.js';
 import { encodeLab, labFromHash } from './serialize.js';
+import { applyFault, describeFault } from './faults.js';
 import { createBridge } from './bridge.js';
 import { Schematic, nodePositions } from './schematic.js';
 import { Scope } from './scope.js';
@@ -33,6 +34,7 @@ const state = {
   gen: 0, // circuit generation: bumped whenever a new lab/circuit is loaded
   applied: 0,
   done: new Set(),
+  faults: [], // [{ id, fault, original, at }] in the order they were injected
   cursorSel: 0,
   focusNode: null,
 };
@@ -110,12 +112,15 @@ function loadCircuit(circuit, { announceIt = true } = {}) {
   state.selected = null;
   state.focusNode = null;
   state.done = new Set();
+  state.faults = [];
   state.silentEval = true;
   state.sweepT0 = performance.now();
   schematic.select(null);
   schematic.setCircuit(circuit);
+  schematic.setFaults([]);
   renderPresets();
   renderParts();
+  renderFaults();
   renderInspector();
   renderTimebase();
   renderProbeSelects();
@@ -317,6 +322,7 @@ function updateTelemetry() {
   if (!r || !r.ok) {
     ['#m-vpp', '#m-vrms', '#m-freq', '#m-f0', '#m-rmse'].forEach((id) => set(id, '--'));
     set('#m-ms', r && r.ms ? `${r.ms.toFixed(1)} ms` : '--');
+    $('#m-ms').classList.remove('warn');
     return;
   }
   const m = r.chans.ch1 && r.chans.ch1.metrics;
@@ -337,8 +343,10 @@ function updateTelemetry() {
   set('#m-f0', val);
   $('#m-f0').title = key === 'Vth / Rth' && s ? `Vth ${fmtNum(s.vth, 'V', 6)}, Rth ${fmtNum(s.rth, 'Ω', 6)}` : val;
   set('#m-rmse', v && v.ok ? `${fmtPct(v.rmsePct)}` : '--');
-  set('#m-ms', `${r.timing.total.toFixed(1)} ms${bridge.mode === 'worker' ? '' : ' (main)'}`);
-  $('#m-ms').title = `Transient ${r.timing.tran.toFixed(1)} ms, AC ${r.timing.ac.toFixed(1)} ms, theory ${r.timing.theory.toFixed(1)} ms, computed in ${bridge.mode === 'worker' ? 'a Web Worker' : 'the main thread'}`;
+  const warn = !!(r.warnings && r.warnings.length);
+  set('#m-ms', `${r.timing.total.toFixed(1)} ms${bridge.mode === 'worker' ? '' : ' (main)'}${warn ? ' !' : ''}`);
+  $('#m-ms').classList.toggle('warn', warn);
+  $('#m-ms').title = `Transient ${r.timing.tran.toFixed(1)} ms, AC ${r.timing.ac.toFixed(1)} ms, theory ${r.timing.theory.toFixed(1)} ms, computed in ${bridge.mode === 'worker' ? 'a Web Worker' : 'the main thread'}${warn ? '. Solver warning: the matrix is near singular.' : ''}`;
 }
 
 function fmtPct(p) {
@@ -361,12 +369,15 @@ function renderVerify(flash = false) {
   if (!r.ok) {
     body.innerHTML = '<div class="verdict off"><div class="what"></div></div>';
     body.querySelector('.what').textContent = `The circuit did not solve. ${r.error ? r.error.message : ''}`;
+    appendFaultHint(body);
     return;
   }
   const v = r.verify;
   if (!v || !v.ok) {
     body.innerHTML = '<div class="verdict off"><div class="what"></div></div>';
     body.querySelector('.what').textContent = v && v.reason ? v.reason : 'No closed-form model for this circuit.';
+    appendFaultHint(body);
+    appendWarnings(body, r);
     return;
   }
   const verdict = document.createElement('div');
@@ -379,6 +390,8 @@ function renderVerify(flash = false) {
   model.className = 'model';
   model.textContent = v.model;
   body.appendChild(model);
+  appendFaultHint(body);
+  appendWarnings(body, r);
   if (v.checks.length) {
     const t = document.createElement('table');
     t.className = 'checks';
@@ -404,6 +417,26 @@ function renderVerify(flash = false) {
   }
 }
 
+function appendFaultHint(body) {
+  if (!state.faults.length) return;
+  const p = document.createElement('p');
+  p.className = 'fault-hint';
+  p.textContent = `Fault active: ${faultSummary()}. Restore the part from the fault strip or the inspector to return to the healthy lab.`;
+  body.appendChild(p);
+}
+
+function appendWarnings(body, r) {
+  for (const w of (r && r.warnings) || []) {
+    const box = document.createElement('div');
+    box.className = 'notice';
+    box.setAttribute('role', 'status');
+    box.innerHTML = '<strong></strong><span></span>';
+    box.querySelector('strong').textContent = 'Solver warning';
+    box.querySelector('span').textContent = w.message;
+    body.appendChild(box);
+  }
+}
+
 function renderChallenges(evaluate = false) {
   const list = $('#challenges');
   const p = PRESETS[state.presetIdx];
@@ -412,6 +445,16 @@ function renderChallenges(evaluate = false) {
     $('#score').textContent = '';
     const li = document.createElement('li');
     li.textContent = 'Custom circuit. Press 1 to 5 to load a guided lab with challenges.';
+    list.appendChild(li);
+    return;
+  }
+  // A faulted part must not grade as a solved challenge (a shorted load would "pass" the
+  // loading challenge by accident). Grading pauses until every fault is restored.
+  if (state.faults.length) {
+    $('#score').textContent = '';
+    const li = document.createElement('li');
+    li.className = 'paused';
+    li.textContent = 'Challenges are paused while a fault is active. Restore the part to grade this lab again.';
     list.appendChild(li);
     return;
   }
@@ -446,10 +489,12 @@ function renderParts() {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'part-chip';
+    const rec = faultRecord(p.id);
+    if (rec) b.classList.add('faulted');
     b.setAttribute('role', 'option');
     b.setAttribute('aria-selected', String(state.selected === p.id));
-    b.textContent = p.id;
-    b.title = PART_TYPES[p.type] ? PART_TYPES[p.type].label : p.type;
+    b.textContent = rec ? `${p.id} ${rec.fault === 'open' ? 'open' : 'short'}` : p.id;
+    b.title = rec ? describeFault(rec.original, rec.fault) : (PART_TYPES[p.type] ? PART_TYPES[p.type].label : p.type);
     b.addEventListener('click', () => select(p.id));
     box.appendChild(b);
   }
@@ -471,6 +516,91 @@ function describeValueText(p) {
   if (p.type === 'V') return `${p.wave.kind} source`;
   if (p.type === 'D') return p.model === 'led' ? 'red LED' : 'silicon diode';
   return `gain ${formatSI(p.gain || 1e5, '')}, rails ${p.rail || 12} V`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Fault injection                                                    */
+/* ------------------------------------------------------------------ */
+
+function faultRecord(id) {
+  return state.faults.find((f) => f.id === id) || null;
+}
+
+function syncFaults() {
+  schematic.setFaults(state.faults.map((f) => ({ id: f.id, fault: f.fault, at: f.original.at })));
+  renderFaults();
+}
+
+/** A visible strip of every active fault with its own restore control, so an opened part is
+ *  always recoverable even though it no longer exists in the parts list. */
+function renderFaults() {
+  const box = $('#faults');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!state.faults.length) { box.hidden = true; return; }
+  box.hidden = false;
+  for (const f of state.faults) {
+    const item = document.createElement('span');
+    item.className = 'fault-item';
+    const chip = document.createElement('span');
+    chip.className = 'fault-chip';
+    chip.textContent = `${f.id} ${f.fault === 'open' ? 'open' : 'short'}`;
+    chip.title = describeFault(f.original, f.fault);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fault-restore';
+    b.textContent = 'Restore';
+    b.setAttribute('aria-label', `Restore ${f.id}`);
+    b.addEventListener('click', () => restoreFault(f.id));
+    item.append(chip, b);
+    box.appendChild(item);
+  }
+}
+
+function faultSummary() {
+  return state.faults.map((f) => describeFault(f.original, f.fault)).join('. ');
+}
+
+function faultPart(id, fault) {
+  const p = byId(id);
+  if (!p) return;
+  const existing = faultRecord(id);
+  const original = existing ? existing.original : JSON.parse(JSON.stringify(p));
+  const index = existing ? existing.index : state.circuit.parts.findIndex((q) => q.id === id);
+  // Always apply the fault to the healthy part so faults never stack on one another.
+  if (existing) state.circuit.parts[index] = JSON.parse(JSON.stringify(existing.original));
+  let next;
+  try { next = applyFault(state.circuit, id, fault); } catch (e) { toast(e && e.message ? e.message : 'That fault could not be applied.'); return; }
+  state.circuit = next;
+  const rec = { id, fault, original, index };
+  // A short makes a time constant far below the lab's step, where trapezoidal integration rings.
+  // Backward Euler is L-stable, so the trace shows the fault instead of integration ringing.
+  if (fault === 'short' && state.circuit.sim.method !== 'be') {
+    rec.methodBefore = state.circuit.sim.method || 'trap';
+    state.circuit.sim.method = 'be';
+  }
+  state.faults = state.faults.filter((f) => f.id !== id).concat([rec]);
+  state.selected = fault === 'open' ? null : id;
+  schematic.select(state.selected);
+  structuralChange();
+  toast(fault === 'open' ? `${id} opened` : `${id} shorted`);
+  announce(`Fault applied. ${describeFault(original, fault)}.${rec.methodBefore ? ' Backward Euler is on so the stiff trace stays clean.' : ''}`);
+}
+
+function restoreFault(id) {
+  const rec = faultRecord(id);
+  if (!rec) return;
+  const parts = state.circuit.parts;
+  const i = parts.findIndex((q) => q.id === id);
+  if (i >= 0) parts.splice(i, 1);
+  parts.splice(Math.min(rec.index, parts.length), 0, JSON.parse(JSON.stringify(rec.original)));
+  if (rec.methodBefore) state.circuit.sim.method = rec.methodBefore;
+  state.faults = state.faults.filter((f) => f.id !== id);
+  state.selected = id;
+  schematic.select(id);
+  structuralChange();
+  toast(`${id} restored`);
+  announce(`Fault cleared. ${id} restored.`);
 }
 
 let editAnnounceTimer = 0;
@@ -540,6 +670,7 @@ function changed(live = false) {
 
 function structuralChange() {
   schematic.setCircuit(state.circuit);
+  syncFaults();
   renderParts();
   renderInspector();
   renderProbeSelects();
@@ -572,6 +703,38 @@ function renderInspector() {
   title.querySelector('strong').textContent = p.id;
   title.querySelector('span').textContent = PART_TYPES[p.type].label;
   box.appendChild(title);
+
+  // Fault state first: it explains why the part below may look like the wrong type.
+  const rec = faultRecord(p.id);
+  if (rec) {
+    const banner = document.createElement('div');
+    banner.className = 'fault-banner';
+    banner.innerHTML = '<strong></strong><span></span><button type="button" class="btn btn-small"></button>';
+    banner.querySelector('strong').textContent = rec.fault === 'open' ? 'Open' : 'Short';
+    banner.querySelector('span').textContent = describeFault(rec.original, rec.fault);
+    const restore = banner.querySelector('button');
+    restore.textContent = 'Restore part';
+    restore.addEventListener('click', () => restoreFault(p.id));
+    box.appendChild(banner);
+  } else {
+    const faultWrap = document.createElement('div');
+    faultWrap.className = 'field';
+    faultWrap.innerHTML = '<span>Fault injection</span><div class="row-actions"></div>';
+    const row = faultWrap.querySelector('.row-actions');
+    for (const [fault, label, title2] of [
+      ['open', 'Open part', 'Remove this part from the circuit'],
+      ['short', 'Short part', 'Replace this part with a milliohm short'],
+    ]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-small';
+      b.textContent = label;
+      b.title = title2;
+      b.addEventListener('click', () => faultPart(p.id, fault));
+      row.appendChild(b);
+    }
+    box.appendChild(faultWrap);
+  }
 
   if (p.type === 'R' || p.type === 'C' || p.type === 'L') {
     const unit = { R: 'Ω', C: 'F', L: 'H' }[p.type];
@@ -611,6 +774,38 @@ function renderInspector() {
       num('freq', 'Start frequency', 'Hz', RANGES.freq);
       num('f2', 'End frequency', 'Hz', RANGES.freq);
       num('sweep', 'Sweep time', 's');
+    }
+
+    // One-click guided discovery: drive the source at this lab's cutoff or natural frequency, so
+    // the -3 dB point or the resonant peak appears with the theory overlay in a single click.
+    const sum = state.result && state.result.verify && state.result.verify.ok ? state.result.verify.summary : null;
+    const fKey = state.circuit.lab === 'rc' ? 'fc' : state.circuit.lab === 'rlc' ? 'f0' : null;
+    const fTarget = fKey && sum ? sum[fKey] : NaN;
+    if (Number.isFinite(fTarget) && fTarget > 0) {
+      const drive = document.createElement('button');
+      drive.type = 'button';
+      drive.className = 'btn btn-small drive-btn';
+      drive.textContent = `${fKey === 'fc' ? 'Drive at fc' : 'Drive at f0'}, ${formatSI(fTarget, 'Hz')}`;
+      drive.title = 'Set this source to a sine at the lab frequency and fit the window to it';
+      drive.addEventListener('click', () => {
+        w.kind = 'sine';
+        w.amp = Math.abs(w.amp) || 1;
+        w.offset = 0;
+        w.phase = 0;
+        w.freq = +Number(fTarget).toPrecision(6);
+        fitTimebase(w);
+        if (!scope.flags.theory) setFlag('theory', true);
+        renderInspector();
+        schematic.setCircuit(state.circuit);
+        changed();
+        toast(`Driving at ${formatSI(fTarget, 'Hz')}`);
+        announce(`Source set to a sine at ${formatSI(fTarget, 'Hz')}.`);
+      });
+      const wrap = document.createElement('div');
+      wrap.className = 'field';
+      wrap.innerHTML = '<span>Guided discovery</span>';
+      wrap.appendChild(drive);
+      box.appendChild(wrap);
     }
   } else if (p.type === 'D') {
     box.appendChild(selectField('Model', [['si', 'Silicon (Is 10 fA, n 1)'], ['led', 'Red LED (Is 1 aA, n 2)']], p.model || 'si', (m) => {
@@ -691,6 +886,7 @@ function fitTimebase(w) {
 function deletePart(id) {
   if (state.circuit.parts.length <= 1) { toast('Keep at least one part.'); return; }
   state.circuit.parts = state.circuit.parts.filter((q) => q.id !== id);
+  state.faults = state.faults.filter((f) => f.id !== id);
   if (state.circuit.math === id) state.circuit.math = '';
   state.selected = null;
   schematic.select(null);
@@ -763,7 +959,8 @@ function bindTimebase() {
 
 function describeCircuit() {
   const parts = state.circuit.parts.map((p) => `${p.id} ${describeValueText(p)} from ${p.nodes.map((n) => (n === '0' ? 'ground' : n)).join(' to ')}`);
-  $('#schem-desc').textContent = `${parts.length} parts. ${parts.join('. ')}.`;
+  const faults = state.faults.length ? ` Faults: ${faultSummary()}.` : '';
+  $('#schem-desc').textContent = `${parts.length} parts. ${parts.join('. ')}.${faults}`;
 }
 
 /* ------------------------------------------------------------------ */
