@@ -22,7 +22,7 @@ Most students meet circuits as equations on paper. A real bench (function genera
 
 ## Measured accuracy
 
-From `node --test tests/engine.test.mjs` on 2026-11-18 (Node 26). RMSE is between the simulated node voltage and the closed-form curve over the whole window; percent is of the theory's full scale.
+From `node --test tests/` on 2026-11-20 (Node 26). RMSE is between the simulated node voltage and the closed-form curve over the whole window; percent is of the theory's full scale.
 
 | Lab | Model | RMSE | RMSE % of full scale | Max error |
 | --- | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ Other checks from the same run.
 - Rectifier peak diode drop 0.726 V. Newton-Raphson took 21,675 iterations over 10,000 steps, at most 5 in one step.
 - Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD. THD is withheld with a clear reason when the window has too few cycles or the drive is non-periodic.
 - The op-amp Math trace plots output-port power, V(out) times I(out): 2.499 mW peak in lab 4. Supply consumption cannot be inferred from the three-pin model.
-- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 27 tests and passes with zero dependencies.
+- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 39 tests and passes with zero dependencies.
 
 The rectifier model is the textbook ideal-switch analysis with a Shockley forward drop. It is labelled approximate in the app and its 0.59 % RMSE is reported as is.
 
@@ -59,6 +59,7 @@ src/theory.js               closed-form models for the five labs (never imports 
 src/compute.js              one lab run: transient + AC + spectra + theory check
 src/worker.js, bridge.js    Web Worker compute with a main-thread fallback
 src/presets.js              the five labs, layouts and self-checking challenges
+src/faults.js               open/short fault injection helpers
 src/serialize.js            #lab= share-link codec with strict validation
 src/schematic.js            schematic canvas
 src/scope.js                oscilloscope canvas (time, spectrum, Bode, acoustic)
@@ -134,7 +135,7 @@ python3 -m http.server 8000
 Run the tests with no install (checked with Node 26).
 
 ```
-node --test tests/engine.test.mjs
+node --test tests/
 ```
 
 ## License

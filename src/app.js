@@ -370,9 +370,9 @@ function renderVerify(flash = false) {
     return;
   }
   const verdict = document.createElement('div');
-  verdict.className = `verdict ${v.exact ? 'ok' : 'approx'}`;
+  verdict.className = `verdict ${v.pass ? 'ok' : (v.exact ? 'approx' : 'off')}`;
   verdict.innerHTML = '<div class="big"></div><div class="what"></div>';
-  verdict.querySelector('.big').textContent = fmtPct(v.rmsePct);
+  verdict.querySelector('.big').textContent = v.pass ? 'PASS' : 'FAIL';
   verdict.querySelector('.what').textContent = `RMSE of node ${v.node} against ${v.exact ? 'the exact closed form' : 'an approximate textbook model'}. ${fmtNum(v.rmse, 'V', 3)} RMS, max error ${fmtNum(v.maxErr, 'V', 3)} over ${r.tran.t.length} samples.`;
   body.appendChild(verdict);
   const model = document.createElement('p');

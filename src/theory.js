@@ -494,6 +494,9 @@ export function verify(circuit, tran, ac) {
     const vin = tran.nodes.in;
     checks.push(check('Loaded Vout', s.ratio * vin[0], out[0], 'V', 1e-6, 1e-9));
   }
+  const allChecksPass = checks.every((c) => c && c.pass);
+  const exact = !!(th && th.exact);
+  const rmseOk = exact ? cmp.rmsePct < 0.5 : cmp.rmsePct < 1;
   return {
     ok: true,
     lab: th.lab,
@@ -504,5 +507,6 @@ export function verify(circuit, tran, ac) {
     summary: s,
     ...cmp,
     checks,
+    pass: allChecksPass && rmseOk,
   };
 }

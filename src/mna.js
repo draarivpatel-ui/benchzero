@@ -43,8 +43,10 @@ function fail(code, message, extra = {}) {
 export function solveDense(A, b, n) {
   let scale = 0;
   for (let i = 0; i < n * n; i++) scale = Math.max(scale, Math.abs(A[i]));
-  if (!(scale > 0)) return { ok: false, row: 0 };
+  if (!(scale > 0)) return { ok: false, row: 0, illConditioned: false };
   const tol = 1e-14 * scale;
+  let minPivot = Infinity;
+  let maxPivot = 0;
   for (let k = 0; k < n; k++) {
     let p = k;
     let best = Math.abs(A[k * n + k]);
@@ -52,7 +54,7 @@ export function solveDense(A, b, n) {
       const v = Math.abs(A[i * n + k]);
       if (v > best) { best = v; p = i; }
     }
-    if (!(best > tol)) return { ok: false, row: k };
+    if (!(best > tol)) return { ok: false, row: k, illConditioned: true };
     if (p !== k) {
       for (let j = 0; j < n; j++) {
         const t = A[k * n + j]; A[k * n + j] = A[p * n + j]; A[p * n + j] = t;
@@ -60,6 +62,9 @@ export function solveDense(A, b, n) {
       const t = b[k]; b[k] = b[p]; b[p] = t;
     }
     const piv = A[k * n + k];
+    const ap = Math.abs(piv);
+    if (ap < minPivot) minPivot = ap;
+    if (ap > maxPivot) maxPivot = ap;
     for (let i = k + 1; i < n; i++) {
       const f = A[i * n + k] / piv;
       if (f === 0) continue;
@@ -74,8 +79,9 @@ export function solveDense(A, b, n) {
     for (let j = i + 1; j < n; j++) s -= A[i * n + j] * x[j];
     x[i] = s / A[i * n + i];
   }
-  for (let i = 0; i < n; i++) if (!Number.isFinite(x[i])) return { ok: false, row: i };
-  return { ok: true, x };
+  for (let i = 0; i < n; i++) if (!Number.isFinite(x[i])) return { ok: false, row: i, illConditioned: true };
+  const condEstimate = maxPivot > 0 ? minPivot / maxPivot : 0;
+  return { ok: true, x, illConditioned: condEstimate < 1e-10 };
 }
 
 /** Complex version of solveDense with separate real and imaginary arrays. */
@@ -677,6 +683,7 @@ export function acSweep(circuit, opts = {}) {
   if (!op.ok) return op;
   const lin = op.lin;
   const rawFreqs = opts.freqs || [];
+  if (!rawFreqs || (typeof rawFreqs.length !== 'number') || rawFreqs.length === 0) return fail('BAD_AC', 'AC sweep needs at least one frequency.');
   for (let i = 0; i < rawFreqs.length; i++) {
     if (!Number.isFinite(rawFreqs[i]) || rawFreqs[i] <= 0) {
       return fail('BAD_AC', 'AC sweep frequencies must be finite positive numbers.');
