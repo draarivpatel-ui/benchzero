@@ -399,12 +399,18 @@ function renderVerify(flash = false) {
     const tb = t.querySelector('tbody');
     for (const c of v.checks) {
       const tr = document.createElement('tr');
-      const unit = c.unit === 'V/V' || c.unit === '%' || c.unit === 'deg' || c.unit === 'dB' ? null : c.unit;
-      const f = (x) => (unit ? fmtNum(x, unit, 5) : `${Number(x).toFixed(c.unit === 'V/V' ? 4 : 3)} ${c.unit === 'deg' ? '°' : c.unit}`);
       tr.innerHTML = '<td></td><td class="num"></td><td class="num"></td><td></td>';
       tr.children[0].textContent = c.name;
-      tr.children[1].textContent = f(c.expected);
-      tr.children[2].textContent = f(c.measured);
+      if (c.skipped) {
+        // A skipped check carries NaN expected/measured plus a plain-language note.
+        tr.children[1].textContent = 'N/A';
+        tr.children[2].textContent = c.note || 'N/A';
+      } else {
+        const unit = c.unit === 'V/V' || c.unit === '%' || c.unit === 'deg' || c.unit === 'dB' ? null : c.unit;
+        const f = (x) => (unit ? fmtNum(x, unit, 5) : `${Number(x).toFixed(c.unit === 'V/V' ? 4 : 3)} ${c.unit === 'deg' ? '°' : c.unit}`);
+        tr.children[1].textContent = f(c.expected);
+        tr.children[2].textContent = f(c.measured);
+      }
       tr.children[3].innerHTML = c.pass ? '<span class="pass" aria-label="pass">✓</span>' : '<span class="fail" aria-label="fail">✗</span>';
       tb.appendChild(tr);
     }
@@ -566,13 +572,23 @@ function faultPart(id, fault) {
   if (!p) return;
   const existing = faultRecord(id);
   const original = existing ? existing.original : JSON.parse(JSON.stringify(p));
-  const index = existing ? existing.index : state.circuit.parts.findIndex((q) => q.id === id);
-  // Always apply the fault to the healthy part so faults never stack on one another.
-  if (existing) state.circuit.parts[index] = JSON.parse(JSON.stringify(existing.original));
+  // Always apply the fault to the healthy part so faults never stack on one another. The stub may
+  // have moved since the fault was recorded (an earlier part can be deleted), so find its current
+  // slot rather than trusting the recorded index.
+  if (existing) {
+    const at = state.circuit.parts.findIndex((q) => q.id === id);
+    if (at >= 0) state.circuit.parts[at] = JSON.parse(JSON.stringify(existing.original));
+  }
+  const atNow = state.circuit.parts.findIndex((q) => q.id === id);
+  const preParts = state.circuit.parts;
   let next;
   try { next = applyFault(state.circuit, id, fault); } catch (e) { toast(e && e.message ? e.message : 'That fault could not be applied.'); return; }
   state.circuit = next;
-  const rec = { id, fault, original, index };
+  const rec = {
+    id, fault, original, index: atNow,
+    beforeId: preParts[atNow - 1] ? preParts[atNow - 1].id : null,
+    afterId: preParts[atNow + 1] ? preParts[atNow + 1].id : null,
+  };
   // A short makes a time constant far below the lab's step, where trapezoidal integration rings.
   // Backward Euler is L-stable, so the trace shows the fault instead of integration ringing.
   if (fault === 'short' && state.circuit.sim.method !== 'be') {
@@ -593,7 +609,16 @@ function restoreFault(id) {
   const parts = state.circuit.parts;
   const i = parts.findIndex((q) => q.id === id);
   if (i >= 0) parts.splice(i, 1);
-  parts.splice(Math.min(rec.index, parts.length), 0, JSON.parse(JSON.stringify(rec.original)));
+  // A shorted part's stub already sits at the right slot; an opened part has none, so anchor it
+  // next to a surviving neighbour recorded at fault time before falling back to the raw index.
+  let at = i >= 0 ? i : -1;
+  if (at < 0 && rec.afterId) at = parts.findIndex((q) => q.id === rec.afterId);
+  if (at < 0 && rec.beforeId) {
+    const b = parts.findIndex((q) => q.id === rec.beforeId);
+    if (b >= 0) at = b + 1;
+  }
+  if (at < 0) at = Math.min(rec.index, parts.length);
+  parts.splice(at, 0, JSON.parse(JSON.stringify(rec.original)));
   if (rec.methodBefore) state.circuit.sim.method = rec.methodBefore;
   state.faults = state.faults.filter((f) => f.id !== id);
   state.selected = id;
@@ -928,7 +953,7 @@ function renderTimebase() {
   const m = $('#in-math');
   m.innerHTML = '';
   for (const p of c.parts) {
-    if (p.type === 'OPAMP') continue;
+    // Op-amps belong here too: the math trace for one is its output-port power.
     const o = document.createElement('option');
     o.value = p.id; o.textContent = p.id;
     m.appendChild(o);
@@ -941,7 +966,8 @@ function bindTimebase() {
     const v = parseSI(input.value);
     const c = state.circuit;
     const next = { ...c.sim, [key]: v };
-    const steps = next.tstop / next.dt;
+    // The solver rounds to an integer number of steps and snaps the step to land on tstop.
+    const steps = Math.round(next.tstop / next.dt);
     if (!(v > 0) || !(steps >= 4) || steps > 20000) {
       input.setAttribute('aria-invalid', 'true');
       announce('Window divided by step must be between 4 and 20000 samples.');
@@ -1006,7 +1032,8 @@ function onKey(e) {
       state.focusNode = ns[j];
       schematic.focusNode = ns[j];
       const r = state.result;
-      const v = r && r.ok ? r.tran.nodes[ns[j]][schematic.index] : NaN;
+      // The live result can predate a just-created node; report -- rather than crash on undefined.
+      const v = r && r.ok ? (r.tran.nodes[ns[j]] || [])[schematic.index] : NaN;
       announce(`Node ${ns[j]}, ${fmtNum(v, 'volts', 4)}. Press 1 for CH1 or 2 for CH2.`);
       e.preventDefault();
       return;

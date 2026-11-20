@@ -378,6 +378,8 @@ kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 
 /* ---------------- responsive ---------------- */
 @media (max-width: 1180px) {
   .schem, .scopep { grid-column: span 12; }
+  /* On narrow screens the live instrument leads the story: scope first, schematic second. */
+  .scopep { order: -1; }
   .insp { grid-column: span 6; }
   .verify { grid-column: span 6; }
   .guide { grid-column: span 12; }

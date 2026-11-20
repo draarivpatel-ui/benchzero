@@ -466,11 +466,17 @@ function setLinFromX(p, x, lin, raw) {
     const k = p.gain / p.rail;
     const uo = k * old;
     const un = k * vd;
-    let u;
-    if (Math.abs(uo) > 3 && Math.abs(un) > 3 && Math.sign(uo) === Math.sign(un)) u = un; // stays saturated
-    else if (Math.abs(uo) > 3) u = Math.sign(uo) * 3; // leaving saturation: enter at the knee
-    else u = uo + Math.max(-1.5, Math.min(1.5, un - uo));
-    const lim = u / k;
+    let lim;
+    if (Math.abs(uo) > 3 && Math.abs(un) > 3 && Math.sign(uo) === Math.sign(un)) {
+      // Saturated on the same side: the linearization point IS the solved vd. Storing vd itself
+      // avoids the u -> u/k round-trip, whose floating-point residue kept the off-point test
+      // below from ever reaching zero at large |vd| (a false NO_CONVERGENCE at a real fixed point).
+      lim = vd;
+    } else if (Math.abs(uo) > 3) {
+      lim = (Math.sign(uo) * 3) / k; // leaving saturation: re-enter at the knee
+    } else {
+      lim = (uo + Math.max(-1.5, Math.min(1.5, un - uo))) / k;
+    }
     lin.set(p.id, lim);
     return Math.abs(lim - old) > 1e-12 + 1e-9 * Math.abs(lim) || Math.abs(lim - vd) > 1e-12;
   }
@@ -575,13 +581,16 @@ export function transient(circuit, opts = {}) {
   if (!c.ok) return c;
   const net = c.net;
   const tstop = Number(opts.tstop);
-  const dt = Number(opts.dt);
-  if (!(Number.isFinite(tstop) && Number.isFinite(dt) && tstop > 0 && dt > 0)) {
+  const dtAsked = Number(opts.dt);
+  if (!(Number.isFinite(tstop) && Number.isFinite(dtAsked) && tstop > 0 && dtAsked > 0)) {
     return fail('BAD_SIM', 'Simulation time and step must be finite positive numbers.');
   }
-  const steps = Math.round(tstop / dt);
+  const steps = Math.round(tstop / dtAsked);
   if (steps < 4) return fail('BAD_SIM', 'The window holds fewer than 4 time steps.');
   if (steps > MAX_SAMPLES) return fail('BAD_SIM', `At most ${MAX_SAMPLES} time steps (asked for ${steps}). Raise the step or shorten the window.`);
+  // Snap the step so the output grid lands exactly on tstop when tstop/dt is not an integer.
+  // The declared window, scope timebase and cursor times then match the recorded samples.
+  const dt = tstop / steps;
   const method = opts.method === 'be' ? 'be' : 'trap';
 
   // Breakpoints from every source, merged and sorted. Use iterative accumulation instead of

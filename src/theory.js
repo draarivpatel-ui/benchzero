@@ -375,19 +375,26 @@ export function compareCurves(sim, theory) {
   };
 }
 
-/** Frequency where an AC sweep's magnitude first falls to (reference - 3.0103 dB), log-interpolated. */
+/** Frequency where an AC sweep's magnitude crosses (max gain - 3.0103 dB) nearest the passband edge, log-interpolated. */
 export function minus3dB(ac) {
-  const ref = ac.mag[0];
-  const target = ref - 10 * Math.log10(2);
+  // Reference the strongest visible gain and take the crossing nearest it, either direction, so
+  // high-pass and bandpass shapes report a corner as well as low-pass ones.
+  let k = 0;
+  for (let i = 1; i < ac.mag.length; i++) if (ac.mag[i] > ac.mag[k]) k = i;
+  const target = ac.mag[k] - 10 * Math.log10(2);
+  let bi = -1;
   for (let i = 1; i < ac.mag.length; i++) {
-    if (ac.mag[i] <= target) {
-      const a = ac.mag[i - 1];
-      const b = ac.mag[i];
-      const u = (a - target) / (a - b);
-      return 10 ** (Math.log10(ac.freqs[i - 1]) + u * (Math.log10(ac.freqs[i]) - Math.log10(ac.freqs[i - 1])));
+    const a = ac.mag[i - 1] - target;
+    const b = ac.mag[i] - target;
+    if (a === 0 || a * b < 0) {
+      if (bi < 0 || Math.abs(i - k) < Math.abs(bi - k)) bi = i;
     }
   }
-  return NaN;
+  if (bi < 0) return NaN;
+  const a = ac.mag[bi - 1];
+  const b = ac.mag[bi];
+  const u = a === b ? 0 : (a - target) / (a - b);
+  return 10 ** (Math.log10(ac.freqs[bi - 1]) + u * (Math.log10(ac.freqs[bi]) - Math.log10(ac.freqs[bi - 1])));
 }
 
 /** Peak of an AC sweep with parabolic refinement in log frequency. */

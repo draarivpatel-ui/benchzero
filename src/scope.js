@@ -564,7 +564,9 @@ export class Scope {
       ctx.textAlign = x > P.x + P.w - 90 ? 'right' : 'left';
       ctx.fillText(label, x + (ctx.textAlign === 'left' ? 5 : -5), P.y + half - 12);
     };
-    const isPeak = Number.isFinite(ref.peakFreq) && ref.peakDb > (ref.refDb ?? ac.mag[0]) + 1;
+    // A resonance marker is meaningful only when the peak rises clearly above both sweep ends;
+    // for a one-pole response the maximum sits on an edge and the fc marker carries the info.
+    const isPeak = Number.isFinite(ref.peakFreq) && ref.peakDb > Math.max(ac.mag[0], ac.mag[n - 1]) + 1;
     if (isPeak) {
       mark(ref.peakFreq, `fpk ${formatSI(ref.peakFreq, 'Hz', 4)}`);
       lines.push(`peak ${ref.peakDb.toFixed(2)} dB`);

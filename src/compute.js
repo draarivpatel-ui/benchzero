@@ -143,21 +143,46 @@ export function refineAC(circuit, ac, source, out) {
     return r.ok ? r.mag[0] : NaN;
   };
   const res = { f3dB: NaN, peakFreq: NaN, peakDb: NaN, phaseAtFc: NaN };
-  // Reference is the low-frequency (passband) gain, taken four decades below the sweep start.
-  const ref = at(ac.freqs[0] * 1e-4);
-  const target = ref - 10 * Math.log10(2);
+  // The -3 dB level is measured down from the passband plateau. The plateau sits outside the
+  // window on whichever side the strongest gain is: below the sweep for a low-pass, above it for
+  // a high-pass. Measuring the reference outside the window matters for accuracy (the edge bin of
+  // a sweep starting above DC is already a fraction of a dB below the true plateau), and a
+  // below-window reference on a high-pass used to land in its stopband, so no crossing existed.
+  // For an interior maximum (tank, bandpass) the half-power points are measured from the peak.
+  let kMax = 0;
+  for (let i = 1; i < ac.mag.length; i++) if (ac.mag[i] > ac.mag[kMax]) kMax = i;
+  let ref;
+  if (kMax === ac.mag.length - 1) {
+    ref = at(ac.freqs[ac.freqs.length - 1] * 1e4);
+  } else if (kMax === 0) {
+    ref = at(ac.freqs[0] * 1e-4);
+  } else {
+    ref = ac.mag[kMax];
+  }
+  if (!Number.isFinite(ref)) ref = ac.mag[kMax];
   res.refDb = ref;
-  for (let i = 1; i < ac.mag.length; i++) {
-    if (ac.mag[i - 1] > target && ac.mag[i] <= target && Number.isFinite(ref)) {
-      let lo = Math.log10(ac.freqs[i - 1]);
-      let hi = Math.log10(ac.freqs[i]);
-      for (let k = 0; k < 50; k++) {
-        const mid = (lo + hi) / 2;
-        if (at(10 ** mid) > target) lo = mid; else hi = mid;
+  const target = ref - 10 * Math.log10(2);
+  // The reported cutoff is the -3 dB crossing nearest the passband edge, either direction.
+  let bi = -1;
+  let rising = false;
+  if (Number.isFinite(ref)) {
+    for (let i = 1; i < ac.mag.length; i++) {
+      const a = ac.mag[i - 1] - target;
+      const b = ac.mag[i] - target;
+      if (a === 0 || a * b < 0) {
+        if (bi < 0 || Math.abs(i - kMax) < Math.abs(bi - kMax)) { bi = i; rising = b > a; }
       }
-      res.f3dB = 10 ** ((lo + hi) / 2);
-      break;
     }
+  }
+  if (bi > 0) {
+    let lo = Math.log10(ac.freqs[bi - 1]);
+    let hi = Math.log10(ac.freqs[bi]);
+    for (let k = 0; k < 50; k++) {
+      const mid = (lo + hi) / 2;
+      const m = at(10 ** mid);
+      if (rising ? m < target : m > target) lo = mid; else hi = mid;
+    }
+    res.f3dB = 10 ** ((lo + hi) / 2);
   }
   // Interpolate phase at the exact refined cutoff (log-frequency, between bracketing sweep bins)
   // so the tag reads -45.0 degrees at fc instead of the first bin above it.
