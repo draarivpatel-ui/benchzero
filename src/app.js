@@ -48,7 +48,7 @@ const schematic = new Schematic($('#schematic'), {
   onProbe: (ch, node) => setProbe(ch, node),
   onMove: () => { save(); describeCircuit(); },
 });
-const scope = new Scope($('#scope'), { onCursor: () => {} });
+const scope = new Scope($('#scope'));
 
 /* ------------------------------------------------------------------ */
 /* Utilities                                                          */
