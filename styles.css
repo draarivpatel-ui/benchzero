@@ -367,6 +367,9 @@ dialog h2 { margin: 0 0 12px; font-size: 16px; }
 .keys dt { color: var(--ink-2); white-space: nowrap; }
 .keys dd { margin: 0; color: var(--ink-3); }
 kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--bezel); background: #0a0f15; color: var(--ink); }
+.keys-note { margin: 0 0 10px; font-size: 12px; color: var(--ink-3); }
+.keys-toggle { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.keys-toggle input { accent-color: var(--ch1); }
 .toast {
   position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
   background: #0f1720; border: 1px solid rgba(34, 211, 238, 0.5); color: var(--ink);

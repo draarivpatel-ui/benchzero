@@ -756,6 +756,9 @@ export function acSweep(circuit, opts = {}) {
   if (!rawFreqs || typeof rawFreqs.length !== 'number' || rawFreqs.length === 0) {
     return fail('BAD_AC', 'AC sweep needs at least one frequency.');
   }
+  if (rawFreqs.length > 4096) {
+    return fail('BAD_AC', 'AC sweep is limited to 4096 frequency points.');
+  }
   for (let i = 0; i < rawFreqs.length; i++) {
     if (!Number.isFinite(rawFreqs[i]) || rawFreqs[i] <= 0) {
       return fail('BAD_AC', 'AC sweep frequencies must be finite positive numbers.');

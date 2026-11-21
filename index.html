@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>BenchZero</title>
   <meta name="description" content="A browser circuit bench with a SPICE-style solver, a four-view oscilloscope and a live check against closed-form physics. Runs offline with no install.">
   <meta name="theme-color" content="#0b0f14">
@@ -63,7 +64,7 @@
           <label class="ch ch1"><span>CH1</span><select id="sel-ch1" aria-label="CH1 probe node"></select></label>
           <label class="ch ch2"><span>CH2</span><select id="sel-ch2" aria-label="CH2 probe node"></select></label>
           <button type="button" class="toggle t-theory" id="tg-theory" aria-pressed="true" title="Theory overlay (T)">Theory</button>
-          <button type="button" class="toggle t-math" id="tg-math" aria-pressed="false" title="Math V x I power trace (M)">Math V&#x00d7;I</button>
+          <button type="button" class="toggle t-math" id="tg-math" aria-pressed="false" title="Math V x I power trace (M). Op-amps report power delivered to the load; other parts report power absorbed, so a source reads negative.">Math V&#x00d7;I</button>
         </div>
       </div>
       <div class="canvas-wrap scope-wrap">
@@ -129,6 +130,8 @@
       <dt><kbd>Delete</kbd></dt><dd>Remove the selected part</dd>
       <dt>Click a node</dt><dd>CH1 probe (Shift-click for CH2)</dd>
     </dl>
+    <p class="keys-note">Single-key shortcuts can be switched off. Arrow keys, Enter, Delete and Escape always work.</p>
+    <label class="keys-toggle"><input type="checkbox" id="keys-on" checked> Enable single-key shortcuts</label>
     <form method="dialog"><button class="btn">Close</button></form>
   </dialog>
 

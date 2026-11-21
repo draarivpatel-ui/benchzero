@@ -41,7 +41,7 @@ Other checks from the same run.
 - Rectifier peak diode drop 0.726 V. Newton-Raphson took 21,675 iterations over 10,000 steps, at most 5 in one step.
 - Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD. THD is withheld with a clear reason when the window has too few cycles or the drive is non-periodic.
 - The op-amp Math trace plots output-port power, V(out) times I(out): 2.499 mW peak in lab 4. Supply consumption cannot be inferred from the three-pin model.
-- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 97 tests and passes with zero dependencies.
+- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 180 tests and passes with zero dependencies.
 
 The rectifier model is the textbook ideal-switch analysis with a Shockley forward drop. It is labelled approximate in the app and its 0.59 % RMSE is reported as is.
 

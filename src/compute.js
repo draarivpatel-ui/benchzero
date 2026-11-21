@@ -34,6 +34,16 @@ export function computeLab(circuit) {
   if (!tran.ok) return { ok: false, error: tran.error, ms: now() - t0 };
   for (const w of tran.warnings || []) addWarning(w);
   const fs = 1 / tran.dt;
+  // A periodic source faster than the sample rate aliases onto the scope; say so instead of
+  // presenting the alias as a real measured frequency.
+  for (const p of circuit.parts) {
+    if (p.type !== 'V' || !p.wave) continue;
+    const wv = p.wave;
+    const fMax = wv.kind === 'chirp' ? Math.max(wv.freq || 0, wv.f2 || 0) : (wv.freq || 0);
+    if (fMax > 0.5 * fs) {
+      addWarning({ code: 'SOURCE_ABOVE_NYQUIST', message: `Source ${p.id} at ${fMax} Hz exceeds the ${0.5 * fs} Hz Nyquist limit of this time step; the trace and spectrum show the aliased signal.` });
+    }
+  }
   const probes = circuit.probes || {};
   const i0 = steadyStart(tran, circuit);
   const chans = {};
@@ -59,7 +69,7 @@ export function computeLab(circuit) {
     chans[ch] = {
       node,
       metrics: m,
-      spectrum: spec ? { binHz: spec.binHz, db: spec.db, amp: spec.amp, N: spec.N, peak: spec.peak, fullScale: spec.fullScale, enbw: spec.enbw, coherent: !!spec.coherent, flat: !!spec.flat } : null,
+      spectrum: spec ? { fs: spec.fs, binHz: spec.binHz, db: spec.db, amp: spec.amp, N: spec.N, peak: spec.peak, fullScale: spec.fullScale, enbw: spec.enbw, coherent: !!spec.coherent, flat: !!spec.flat } : null,
       thd: spec && periodicDrive && Number.isFinite(f0) ? thd(spec, f0, 10) : null,
     };
   }

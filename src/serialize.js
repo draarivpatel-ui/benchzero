@@ -44,7 +44,8 @@ function arrToWave(a) {
   const [, amp, offset, freq, duty, delay, phase, f2, sweep] = a;
   if (Math.abs(amp) > 1000 || Math.abs(offset) > 1000) throw new Error('source level out of range');
   if (!(freq > 0 && freq <= 1e7 && f2 > 0 && f2 <= 1e7)) throw new Error('frequency out of range');
-  if (!(duty > 0 && duty < 1) || delay < 0 || !(sweep > 0)) throw new Error('bad wave timing');
+  if (!(duty > 0 && duty < 1) || !(delay >= 0 && delay <= 1e9) || !(sweep > 0 && sweep <= 1e9)) throw new Error('bad wave timing');
+  if (Math.abs(phase) > 1e6) throw new Error('phase out of range');
   return { kind, amp, offset, freq, duty, delay, phase, f2, sweep };
 }
 
@@ -129,7 +130,8 @@ export function unpack(o) {
   if (!Array.isArray(o.pr) || o.pr.length !== 2 || !o.pr.every((n) => n === '' || isNode(n))) throw new Error('Bad probes.');
   c.probes = { ch1: o.pr[0], ch2: o.pr[1] };
   if (!Array.isArray(o.s) || o.s.length < 2 || o.s.length > 3
-    || !o.s.every(isNum) || !(o.s[0] > 0 && o.s[0] <= 100) || !(o.s[1] > 0 && o.s[1] < o.s[0])) {
+    || !o.s.every(isNum) || !(o.s[0] > 0 && o.s[0] <= 100) || !(o.s[1] > 0 && o.s[1] < o.s[0])
+    || Math.round(o.s[0] / o.s[1]) > 20000) {
     throw new Error('Bad simulation window.');
   }
   if (o.s.length === 3 && o.s[2] !== 1) throw new Error('Bad solver method.');

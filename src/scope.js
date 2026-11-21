@@ -342,7 +342,7 @@ export class Scope {
       if (t.key === 'theory') continue;
       const unit = t.key === 'math' ? 'W' : 'V';
       const isOp = this.result && this.result.math && this.result.math.type === 'OPAMP';
-      const label = t.key === 'math' ? `M ${isOp ? 'Pout' : 'P'}(${t.node})` : `${t.key.toUpperCase()} ${t.node}`;
+      const label = t.key === 'math' ? `M ${isOp ? 'Pdel' : 'P'}(${t.node})` : `${t.key.toUpperCase()} ${t.node}`;
       items.push({ text: `${label} ${formatSI(t.scale.per, unit)}/div`, color: t.color });
     }
     items.push({ text: `${formatSI(tr.tstop / DIV_X, 's')}/div`, color: C.text });
@@ -434,7 +434,9 @@ export class Scope {
     if (!r) { this._graticule(); return; }
     const ch1 = r.chans.ch1 && r.chans.ch1.spectrum;
     if (!ch1) { this._graticule(); this._banner('No spectrum for this probe.'); return; }
-    const fs = ch1.binHz * ch1.N;
+    // binHz * N inflates past the true Nyquist for coherent spectra (the resample pads onto a
+    // power-of-two grid); spec.fs carries the real sample rate, so cap the axis at fs/2.
+    const fs = ch1.fs || ch1.binHz * ch1.N;
     const f0 = Math.max(ch1.binHz, 1);
     const f1 = fs / 2;
     const fx = this._logAxis(f0, f1, this.H - 14);
@@ -453,9 +455,10 @@ export class Scope {
     const ym = (db) => P.y + ((top - Math.max(bottom - 5, Math.min(top + 5, db))) / (top - bottom)) * P.h;
     const plotSpec = (spec, color, alpha) => {
       const k0 = Math.max(1, Math.ceil(f0 / spec.binHz));
+      const k1 = Math.min(spec.db.length, Math.floor(f1 / spec.binHz) + 1);
       const data = spec.db;
       const map = (i, v) => [fx(i * spec.binHz), ym(v)];
-      this._trace(data, map, color, { alpha, from: k0, exact: true });
+      this._trace(data, map, color, { alpha, from: k0, upto: k1, exact: true });
     };
     if (this.flags.ch2 && r.chans.ch2 && r.chans.ch2.spectrum) plotSpec(r.chans.ch2.spectrum, C.ch2, 0.4);
     plotSpec(ch1, C.math, 1);

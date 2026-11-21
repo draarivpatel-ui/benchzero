@@ -37,6 +37,7 @@ const state = {
   faults: [], // [{ id, fault, original, at }] in the order they were injected
   cursorSel: 0,
   focusNode: null,
+  keysOn: true, // WCAG 2.1.4: single-key shortcuts can be switched off in the help dialog
 };
 
 const bridge = createBridge({ onMode: () => updateTelemetry() });
@@ -144,7 +145,7 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { safeSet(STORE, encodeLab(state.circuit)); } catch { /* invalid circuit while editing */ }
-    safeSet(STORE_UI, JSON.stringify({ view: state.view, theory: scope.flags.theory, math: scope.flags.math }));
+    safeSet(STORE_UI, JSON.stringify({ view: state.view, theory: scope.flags.theory, math: scope.flags.math, keys: state.keysOn }));
   }, 150);
 }
 
@@ -1016,6 +1017,9 @@ function onKey(e) {
   const inSchem = t === $('#schematic');
   const inScope = t === $('#scope');
   const k = e.key;
+  // WCAG 2.1.4: every shortcut here is a single character key. When the user turns them off
+  // the whole layer is dead; arrows, Enter, Delete and Escape keep working everywhere.
+  if (k.length === 1 && !state.keysOn) return;
   if (inSchem) {
     const parts = state.circuit.parts;
     const i = parts.findIndex((p) => p.id === state.selected);
@@ -1125,6 +1129,12 @@ function bind() {
   $('#sel-ch2').addEventListener('change', (e) => setProbe('ch2', e.target.value));
   document.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => addPart(b.dataset.add)));
   document.addEventListener('keydown', onKey);
+  const kt = $('#keys-on');
+  if (kt) kt.addEventListener('change', () => {
+    state.keysOn = kt.checked;
+    save();
+    announce(kt.checked ? 'Single-key shortcuts on.' : 'Single-key shortcuts off. Arrow keys, Enter, Delete and Escape still work.');
+  });
   bindTimebase();
   const ro = new ResizeObserver(() => { schematic.resize(); scope.resize(); });
   ro.observe($('#schematic'));
@@ -1149,7 +1159,10 @@ function boot() {
     if (VIEWS.includes(ui.view) && ui.view !== 'acoustic') state.view = ui.view;
     if (typeof ui.theory === 'boolean') scope.flags.theory = ui.theory;
     if (typeof ui.math === 'boolean') scope.flags.math = ui.math;
+    if (typeof ui.keys === 'boolean') state.keysOn = ui.keys;
   } catch { /* ignore */ }
+  const kt = $('#keys-on');
+  if (kt) kt.checked = state.keysOn;
   $('#tg-theory').setAttribute('aria-pressed', String(scope.flags.theory));
   $('#tg-math').setAttribute('aria-pressed', String(scope.flags.math));
   scope.setView(state.view);

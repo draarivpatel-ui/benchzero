@@ -435,7 +435,13 @@ export function verify(circuit, tran, ac) {
   const P = Object.fromEntries(circuit.parts.map((p) => [p.id, p]));
   if (th.lab === 'rc' && ac && ac.ok) {
     const f3 = ac.refined && Number.isFinite(ac.refined.f3dB) ? ac.refined.f3dB : minus3dB(ac);
-    checks.push(check('Cutoff fc (-3.01 dB)', s.fc, f3, 'Hz', 0.1));
+    // A cutoff outside the swept range has no -3 dB crossing to measure; that is
+    // "not applicable", not a failure.
+    if (Number.isFinite(f3)) {
+      checks.push(check('Cutoff fc (-3.01 dB)', s.fc, f3, 'Hz', 0.1));
+    } else {
+      checks.push({ name: 'Cutoff fc (-3.01 dB)', expected: s.fc, measured: NaN, unit: 'Hz', tolPct: 0, pass: true, skipped: true, note: 'N/A (outside sweep)' });
+    }
   }
   if (th.lab === 'rc') {
     // Value at t = RC after a step from rest should be 63.2% of the step.
@@ -443,10 +449,16 @@ export function verify(circuit, tran, ac) {
     if (w.kind === 'step' && w.delay === 0) {
       // Linear interpolation between the samples around t = RC.
       const x = s.tau / tran.dt;
-      const i = Math.floor(x);
-      if (i + 1 < out.length) {
-        const v = out[i] + (x - i) * (out[i + 1] - out[i]);
-        checks.push(check('Vc at t = RC (63.2%)', w.offset + w.amp * (1 - Math.exp(-1)), v, 'V', 0.5));
+      if (x < 8) {
+        // Fewer than ~8 samples per time constant: the chord-vs-exponential interpolation
+        // error exceeds the 0.5 % tolerance, so a correct solver would still "fail". Skip.
+        checks.push({ name: 'Vc at t = RC (63.2%)', expected: NaN, measured: NaN, unit: 'V', tolPct: 0, pass: true, skipped: true, note: 'N/A (RC below step resolution)' });
+      } else {
+        const i = Math.floor(x);
+        if (i + 1 < out.length) {
+          const v = out[i] + (x - i) * (out[i + 1] - out[i]);
+          checks.push(check('Vc at t = RC (63.2%)', w.offset + w.amp * (1 - Math.exp(-1)), v, 'V', 0.5));
+        }
       }
     }
   }
@@ -462,6 +474,11 @@ export function verify(circuit, tran, ac) {
       // defined overshoot; a negative step must be measured relative to its own direction.
       if (w.amp === 0) {
         checks.push({ name: 'Step overshoot', expected: NaN, measured: NaN, unit: '%', tolPct: 0, pass: true, skipped: true, note: 'N/A (zero step)' });
+      } else if (!(w.delay < tran.tstop) || !Number.isFinite(s.fd) || w.delay + 1 / (2 * s.fd) > tran.tstop) {
+        // The overshoot peak sits one half-period of the damped ring after the step edge.
+        // If the edge never fires, or the peak falls outside the window, the trace has no
+        // overshoot to measure: not applicable, not a failure.
+        checks.push({ name: 'Step overshoot', expected: NaN, measured: NaN, unit: '%', tolPct: 0, pass: true, skipped: true, note: 'N/A (step or ring outside window)' });
       } else {
         const os = Math.exp((-Math.PI * s.zeta) / Math.sqrt(1 - s.zeta * s.zeta));
         let extreme = w.amp > 0 ? -Infinity : Infinity;
