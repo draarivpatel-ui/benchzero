@@ -119,7 +119,7 @@ export class AcousticLab {
     this.out = ctx.createGain();
     this.out.gain.value = 0;
     this.osc.connect(this.out);
-    let stream = null;
+    let stream;
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no mic api');
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
