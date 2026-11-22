@@ -1,9 +1,10 @@
 // Offline cache for BenchZero. Every path is relative to this file, so the app works at any
 // subpath (for example /benchzero/). Stale-while-revalidate: serve the cache, refresh it quietly.
-const CACHE = 'benchzero-v5';
+const CACHE = 'benchzero-v6';
 const FILES = [
   './',
   './index.html',
+  './stats.html',
   './styles.css',
   './icon.svg',
   './manifest.webmanifest',
@@ -19,6 +20,10 @@ const FILES = [
   './src/schematic.js',
   './src/scope.js',
   './src/serialize.js',
+  './src/sha256.js',
+  './src/stats-app.js',
+  './src/stats-io.js',
+  './src/stats-lab.js',
   './src/theory.js',
   './src/units.js',
   './src/waves.js',

@@ -142,6 +142,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .panel {
   position: relative;
+  scroll-margin-top: 64px; /* keep anchored targets clear of the sticky .bar */
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 1px solid var(--bezel);
   border-radius: var(--r);
@@ -378,6 +379,55 @@ kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 
   max-width: calc(100vw - 32px);
 }
 
+/* ---------------- rigor page (stats.html) ---------------- */
+.st-input { grid-column: span 4; }
+.st-results { grid-column: span 8; }
+.st-powerp, .st-contamp, .st-exportp, .st-selfp { grid-column: span 6; }
+.st-body { padding: 10px 12px 12px; display: grid; gap: 10px; }
+.st-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.st-text {
+  background: #0a0f15; border: 1px solid var(--bezel); border-radius: 7px;
+  padding: 8px; font: 600 12px/1.5 var(--mono); color: var(--ink);
+  width: 100%; min-width: 0; resize: vertical;
+}
+.st-tel { margin-bottom: 10px; }
+.st-tables { padding: 0 12px 12px; display: grid; gap: 10px; overflow-x: auto; }
+.st-table { min-width: 640px; }
+.st-disc { margin: 2px 0 0; }
+.st-plot { height: 300px; background: #060a0e; box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.05), inset 0 0 40px rgba(0, 0, 0, 0.8); }
+.st-svg { width: 100%; height: 100%; }
+.st-svg svg { display: block; width: 100%; height: 100%; }
+.st-svg .grid { stroke: #1c2531; stroke-width: 1; }
+.st-svg .grid.target { stroke: #2a3644; stroke-dasharray: 4 4; }
+.st-svg .curve { stroke-width: 2; stroke-linejoin: round; }
+.st-svg .curve.d1 { stroke: var(--bad); }
+.st-svg .curve.d2 { stroke: var(--ch2); }
+.st-svg .curve.d3 { stroke: var(--ch1); }
+.st-svg .dot.d3 { fill: var(--ch1); }
+.st-svg .marker { stroke: var(--math); stroke-width: 1; stroke-dasharray: 3 4; }
+.st-svg text { fill: var(--ink-3); font: 600 10px var(--mono); }
+.st-svg text.mk { fill: var(--math); }
+.st-svg text.leg { font-size: 10.5px; }
+.st-svg text.leg.d1 { fill: var(--bad); }
+.st-svg text.leg.d2 { fill: var(--ch2); }
+.st-svg text.leg.d3 { fill: var(--ch1); }
+.st-ctl { padding: 4px 12px 12px; display: grid; gap: 8px; }
+.st-ctl label { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; align-items: center; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.st-ctl label .st-read { grid-column: 2; }
+.st-read { font: 600 12px var(--mono); color: var(--ink-2); }
+.st-read.pass { color: var(--theory); }
+.st-read.fail { color: var(--bad); }
+.digest { display: grid; gap: 4px; margin: 0; }
+.digest .k { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.st-mono { font: 600 12px var(--mono); color: var(--ch1); overflow-wrap: anywhere; }
+.st-pre {
+  margin: 0; background: #0a0f15; border: 1px solid var(--bezel); border-radius: 7px;
+  padding: 8px; font: 500 11px/1.5 var(--mono); color: var(--ink-2);
+  max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.st-selfout { margin: 10px 12px 12px; min-height: 60px; }
+.st-selfout.all-pass { border-color: rgba(16, 185, 129, 0.45); color: var(--theory); }
+
 /* ---------------- responsive ---------------- */
 @media (max-width: 1180px) {
   .schem, .scopep { grid-column: span 12; }
@@ -386,12 +436,18 @@ kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 
   .insp { grid-column: span 6; }
   .verify { grid-column: span 6; }
   .guide { grid-column: span 12; }
+  .st-input, .st-results, .st-powerp, .st-contamp, .st-exportp, .st-selfp { grid-column: span 12; }
+  .st-results { order: -1; }
   .presets { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
 @media (max-width: 720px) {
   .bar { padding: 10px 16px; gap: 10px; position: static; }
   .bench { padding: 10px 16px 20px; gap: 10px; }
   .insp, .verify, .guide { grid-column: span 12; }
+  .st-tel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-ctl label { grid-template-columns: 1fr; }
+  .st-ctl label .st-read { grid-column: 1; }
+  .st-plot { height: 240px; }
   .presets { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
   .actions { width: 100%; }
   .actions .btn { flex: 1 1 auto; justify-content: center; }

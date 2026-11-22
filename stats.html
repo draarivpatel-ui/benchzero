@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>BenchZero Rigor</title>
+  <meta name="description" content="Paired-bootstrap significance, exact McNemar tests, power curves and contamination bounds for model-vs-model benchmark claims. Offline, seeded, checksummed.">
+  <meta name="theme-color" content="#0b0f14">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preload" href="fonts/benchzero-segment.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#st-results">Skip to the results</a>
+  <header class="bar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1.5" y="1.5" width="29" height="29" rx="7"/><path d="M5 20 h5 l3 -9 l4 14 l3 -9 h7"/></svg>
+      <h1 class="wordmark">BenchZero Rigor</h1>
+    </div>
+    <div class="actions">
+      <a class="btn btn-quiet" href="./" title="Back to the circuit bench">Circuit Bench</a>
+      <button type="button" id="st-link" class="btn btn-quiet" title="Copy a link that restores this exact analysis">Copy Rigor Link</button>
+      <button type="button" id="st-export" class="btn btn-accent" title="Download the SHA-256 checksummed rigor report">Export Report</button>
+    </div>
+  </header>
+
+  <main class="bench">
+    <section class="panel st-input" aria-labelledby="h-input">
+      <div class="panel-head">
+        <h2 id="h-input">Paired Scores</h2>
+        <div class="add" role="group" aria-label="Suites">
+          <button type="button" class="chip" id="st-example">Example</button>
+          <button type="button" class="chip" id="st-add">+ Suite</button>
+          <button type="button" class="chip" id="st-del">Remove</button>
+        </div>
+      </div>
+      <div class="st-body">
+        <div class="st-tabs" id="st-tabs" role="tablist" aria-label="Benchmark suites"></div>
+        <div class="grid2">
+          <label>Model A<input id="st-model-a" class="si" spellcheck="false" autocomplete="off"></label>
+          <label>Model B<input id="st-model-b" class="si" spellcheck="false" autocomplete="off"></label>
+        </div>
+        <label class="field"><span>Suite name</span><input id="st-sname" class="si" spellcheck="false" autocomplete="off"></label>
+        <label class="field"><span>One row per item: id, scoreA, scoreB</span>
+          <textarea id="st-data" class="st-text" rows="10" spellcheck="false" autocomplete="off"></textarea>
+        </label>
+        <p class="tb-note" id="st-parse-note">Comma, tab or space separated. Scores may be 0/1, fractions in [0,1] or percentages in [0,100].</p>
+        <div class="grid2">
+          <label>Seed<input id="st-seed" class="si" inputmode="numeric" spellcheck="false" autocomplete="off"></label>
+          <label>Bootstrap reps<input id="st-reps" class="si" inputmode="numeric" spellcheck="false" autocomplete="off"></label>
+          <label>Alpha<input id="st-alpha" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>
+          <label>CI level<input id="st-level" class="si" inputmode="decimal" spellcheck="false" autocomplete="off"></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel st-results" id="st-results" aria-labelledby="h-results">
+      <div class="panel-head">
+        <h2 id="h-results">Significance</h2>
+        <span class="score" id="st-verdict-tag"></span>
+      </div>
+      <div class="telemetry st-tel" aria-label="Active suite measurements">
+        <div class="tm"><span class="k">Items</span><span class="v" id="m-n">--</span></div>
+        <div class="tm"><span class="k" id="m-accak">acc A</span><span class="v" id="m-acca">--</span></div>
+        <div class="tm"><span class="k" id="m-accbk">acc B</span><span class="v" id="m-accb">--</span></div>
+        <div class="tm"><span class="k">Delta A-B</span><span class="v" id="m-delta">--</span></div>
+        <div class="tm"><span class="k" id="m-cik">Bootstrap CI</span><span class="v" id="m-ci">--</span></div>
+        <div class="tm"><span class="k">p exact / adj</span><span class="v" id="m-p">--</span></div>
+      </div>
+      <div class="st-tables" id="st-tables"></div>
+    </section>
+
+    <section class="panel st-powerp" aria-labelledby="h-power">
+      <div class="panel-head"><h2 id="h-power">Power Curve</h2><span class="score" id="st-mde-tag"></span></div>
+      <div class="canvas-wrap st-plot"><div id="st-power" class="st-svg"></div></div>
+      <div class="st-ctl">
+        <label>Discordant share<input id="st-pdisc" type="range" min="0.05" max="0.9" step="0.01"><span id="st-pdisc-v" class="st-read"></span></label>
+        <p class="tb-note">Approximate power of the paired test versus item count N (normal approximation, two-sided alpha). Tiny evals stay in the coin-flip zone: at N=50 even a real 5-point lead is called correctly barely half the time.</p>
+      </div>
+    </section>
+
+    <section class="panel st-contamp" aria-labelledby="h-contam">
+      <div class="panel-head"><h2 id="h-contam">Contamination Audit</h2><span class="score" id="st-be-tag"></span></div>
+      <div class="canvas-wrap st-plot"><div id="st-contam" class="st-svg"></div></div>
+      <div class="st-ctl">
+        <label>Assumed leakage<input id="st-contam-slider" type="range" min="0" max="20" step="0.5"><span id="st-contam-v" class="st-read"></span></label>
+        <p class="tb-note" id="st-contam-note">Worst case: a share of the test set leaked into A's training data and A answers every leaked item correctly. The bound subtracts that guaranteed share before crediting a lead.</p>
+      </div>
+    </section>
+
+    <section class="panel st-exportp" aria-labelledby="h-export">
+      <div class="panel-head"><h2 id="h-export">Checksummed Report</h2></div>
+      <div class="st-body">
+        <p class="digest"><span class="k">SHA-256</span><code id="st-digest" class="st-mono">--</code></p>
+        <p class="tb-note">The digest covers the canonical payload. It is unkeyed tamper evidence: any edit after export changes it. It is not a signature and says nothing about who produced the data.</p>
+        <div class="row-actions">
+          <button type="button" class="btn btn-small" id="st-exp-json">JSON</button>
+          <button type="button" class="btn btn-small" id="st-exp-csv">CSV</button>
+          <button type="button" class="btn btn-small" id="st-exp-md">Markdown</button>
+          <button type="button" class="btn btn-small btn-quiet" id="st-copy-report">Copy JSON</button>
+        </div>
+        <pre id="st-report-out" class="st-pre" aria-label="Report preview"></pre>
+        <label class="field"><span>Paste a report to re-check its digest and replay the numbers</span>
+          <textarea id="st-tamper-in" class="st-text" rows="4" spellcheck="false" autocomplete="off"></textarea>
+        </label>
+        <div class="row-actions">
+          <button type="button" class="btn btn-small" id="st-tamper-btn">Verify Report</button>
+          <span id="st-tamper-out" class="st-read" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel st-selfp" aria-labelledby="h-self">
+      <div class="panel-head">
+        <h2 id="h-self">Self-Tests</h2>
+        <button type="button" class="btn btn-small" id="st-selftest">Run Self-Tests</button>
+      </div>
+      <pre id="st-selfout" class="st-pre st-selfout" aria-label="Self-test results">Press Run Self-Tests to check the math in this page.</pre>
+    </section>
+  </main>
+
+  <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="src/stats-app.js"></script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 
 A circuit lab bench that runs in any browser. Build or tune a circuit, watch it on a four-view oscilloscope, and check every trace against the closed-form physics from the textbook, live.
 
+A second workbench on the same site, the Rigor page (`stats.html`), turns the same verify-everything attitude on benchmark scores: it answers whether an apparent leaderboard lead between two models is real, or noise, before anyone celebrates a win.
+
 Built to run as plain static files at https://aariv.me/benchzero/ with no install, no account and no API keys, and to keep working offline after the first load.
 
 ## Why
@@ -20,6 +22,10 @@ Most students meet circuits as equations on paper. A real bench (function genera
 - **Share links.** One click copies a URL whose `#lab=` hash rebuilds the circuit, layout, probes and timebase with full numeric precision. All five labs encode in under 400 bytes, and decoding validates every field, bounds coordinates and rejects reserved node names.
 - **Fault injection.** Open or short any part from its inspector and the schematic tags it, the parts chip turns red, and a fault strip keeps a Restore button even after the part has been removed. Shorts use a milliohm resistor so every fault still solves. The verification panel explains the fault, and challenge grading pauses until the part is restored, so a shorted load cannot pass a challenge by accident.
 - **Offline and private.** A service worker caches the app, the lab autosaves to `localStorage`, and nothing leaves the browser.
+- **Paired benchmark rigor (the Rigor page).** Paste paired per-item scores for model A and model B on one or more suites, and get the mean delta with a seeded paired-bootstrap confidence interval and two-sided p, McNemar's exact binomial and continuity-corrected chi-square on the discordant pairs (n01 items only B got right versus n10 only A got right), and a Holm step-down adjustment across the suite family. Synthetic demo suites are labelled synthetic.
+- **Power and contamination analysis.** Statistical power versus item count for fixed effect sizes drawn as SVG curves, a minimum-detectable-effect readout at the suite's own N, and a worst-case contamination bound that slides test-set leakage from 0 % to 20 % and shows where a lead evaporates.
+- **Checksummed, replayable reports.** Every run exports JSON, CSV (spreadsheet-formula safe) and Markdown reports carrying a SHA-256 digest computed in page by a pure-JS FIPS 180-4 implementation. The digest is honestly labelled unkeyed tamper evidence, not a signature. Paste a report back and the page re-verifies the digest and replays the analysis from the embedded rows.
+- **Share links and self-tests.** The Rigor page's `#bz=` hash rebuilds every suite and setting, and a Run Self-Tests panel proves the engine live in the browser: identical models give delta 0 and p 1, McNemar is symmetric, Holm stays monotone and bounded, and the SHA-256 passes the FIPS known-answer vectors.
 
 ## Measured accuracy
 
@@ -41,7 +47,7 @@ Other checks from the same run.
 - Rectifier peak diode drop 0.726 V. Newton-Raphson took 21,675 iterations over 10,000 steps, at most 5 in one step.
 - Whole-cycle FFT of a simulated 200 Hz square wave gives THD (harmonics 2 to 10) of 42.879 %, against 42.879 % from the Fourier series. The clean inverting amplifier output measures 1.8e-4 % THD. THD is withheld with a clear reason when the window has too few cycles or the drive is non-periodic.
 - The op-amp Math trace plots output-port power, V(out) times I(out): 2.499 mW peak in lab 4. Supply consumption cannot be inferred from the three-pin model.
-- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 180 tests and passes with zero dependencies.
+- A full lab run (transient, AC sweep with refinement, spectra, theory) took 0.2 ms to 14 ms per lab in Node 26. The suite has 380 tests and passes with zero dependencies.
 
 The rectifier model is the textbook ideal-switch analysis with a Shockley forward drop. It is labelled approximate in the app and its 0.59 % RMSE is reported as is.
 
@@ -51,6 +57,15 @@ Zero build. Plain HTML, CSS and ES modules, served as static files.
 
 ```
 index.html, styles.css      page and instrument styling
+stats.html                  the paired-benchmark rigor workbench
+src/sha256.js               pure-JS FIPS 180-4 SHA-256 for report digests
+src/stats-lab.js            seeded RNG, paired bootstrap, McNemar exact and
+                            continuity-corrected tests, Holm adjustment, normal
+                            CDF/inverse, power and MDE, contamination bounds
+src/stats-io.js             row parser, canonical JSON, checksummed report build
+                            and verify, replay, CSV and Markdown exports, the
+                            #bz= state codec, the self-test battery
+src/stats-app.js            rigor page controller and labelled synthetic examples
 src/units.js                SI parsing and formatting (1k, 100n, 4.7m, 2.2meg)
 src/waves.js                source waveforms and their discontinuities
 src/mna.js                  MNA solver: dense LU with partial pivoting, Newton-Raphson,
