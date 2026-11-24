@@ -260,7 +260,7 @@ export function packState(state) {
   return {
     v: CODEC_VERSION,
     m: state.models.slice(0, 2),
-    s: [state.seed >>> 0, state.reps | 0, round6(state.alpha)],
+    s: [state.seed >>> 0, state.reps | 0, state.alpha, state.level ?? 0.95, state.pdisc ?? 0.3, state.contamPct ?? 5],
     q: state.suites.map((su) => [
       su.name,
       su.rows.flatMap((r) => [round6(r.a), round6(r.b)]),
@@ -271,9 +271,10 @@ export function packState(state) {
 export function unpackState(o) {
   if (!o || typeof o !== 'object' || o.v !== CODEC_VERSION) throw new Error('Unsupported rigor link version.');
   if (!Array.isArray(o.m) || o.m.length !== 2 || !o.m.every(okName)) throw new Error('Bad model names.');
-  if (!Array.isArray(o.s) || o.s.length !== 3 || !o.s.every(Number.isFinite)) throw new Error('Bad settings.');
-  const [seed, reps, alpha] = o.s;
-  if (!(seed >= 0 && seed <= 0xffffffff) || !(reps >= 10 && reps <= 200000) || !(alpha > 0 && alpha <= 0.5)) {
+  if (!Array.isArray(o.s) || (o.s.length !== 3 && o.s.length !== 6) || !o.s.every(Number.isFinite)) throw new Error('Bad settings.');
+  const [seed, reps, alpha, level = 0.95, pdisc = 0.3, contamPct = 5] = o.s;
+  if (!(seed >= 0 && seed <= 0xffffffff) || !(reps >= 10 && reps <= 200000) || !(alpha > 0 && alpha <= 0.5)
+    || !(level > 0.5 && level < 1) || !(pdisc > 0 && pdisc <= 1) || !(contamPct >= 0 && contamPct <= 100)) {
     throw new Error('Settings out of range.');
   }
   if (!Array.isArray(o.q) || o.q.length < 1 || o.q.length > MAX_SUITES) throw new Error('Bad suite list.');
@@ -287,7 +288,7 @@ export function unpackState(o) {
     for (let i = 0; i < pairs.length; i += 2) rows.push({ id: `i${rows.length + 1}`, a: pairs[i], b: pairs[i + 1] });
     return { name: e[0], rows };
   });
-  return { models: o.m.slice(), seed, reps, alpha, suites };
+  return { models: o.m.slice(), seed, reps, alpha, level, pdisc, contamPct, suites };
 }
 
 export function encodeState(state) {

@@ -415,6 +415,9 @@ function applyState(s) {
   state.seed = s.seed;
   state.reps = s.reps;
   state.alpha = s.alpha;
+  state.level = s.level ?? state.level;
+  state.pdisc = s.pdisc ?? state.pdisc;
+  state.contamPct = s.contamPct ?? state.contamPct;
   state.suites = s.suites.map((su) => ({ name: su.name, text: rowsToText(su.rows), rows: su.rows }));
   state.active = 0;
 }
@@ -525,6 +528,7 @@ function wire() {
   $('#st-link').addEventListener('click', async () => {
     const enc = encodeState({
       models: state.models, seed: state.seed, reps: state.reps, alpha: state.alpha,
+      level: state.level, pdisc: state.pdisc, contamPct: state.contamPct,
       suites: state.suites.filter((s) => s.rows),
     });
     if (!enc.ok) { toast(enc.error); return; }

@@ -156,10 +156,14 @@ export function mcnemar(n01, n10) {
  * tail share of replicates on either side of 0 with a (+1)/(B+1) correction.
  */
 export function pairedBootstrap(diffs, { reps = 10000, seed = 1, level = 0.95, keep = false } = {}) {
-  const n = diffs.length;
-  if (n === 0 || !Array.isArray(diffs) && !ArrayBuffer.isView(diffs)) {
+  const validInput = Array.isArray(diffs) || ArrayBuffer.isView(diffs);
+  if (!validInput || diffs.length === 0) {
     return { ok: false, error: 'bootstrap needs a nonempty array of paired differences' };
   }
+  for (let i = 0; i < diffs.length; i++) {
+    if (!Number.isFinite(diffs[i])) return { ok: false, error: `difference ${i + 1} is not finite` };
+  }
+  const n = diffs.length;
   if (!(reps >= 10 && reps <= 200000) || !(level > 0 && level < 1)) {
     return { ok: false, error: 'bad bootstrap settings' };
   }
@@ -223,6 +227,9 @@ export function holmAdjust(pvals) {
  * When c >= accA_obs the whole observed score could be leakage, so the bound is 0.
  */
 export function contaminationBounds(accA, accB, c) {
+  if (!Number.isFinite(accA) || !Number.isFinite(accB) || accA < 0 || accA > 1 || accB < 0 || accB > 1) {
+    return { ok: false, error: 'accuracies must be finite numbers in [0, 1]' };
+  }
   if (!(c >= 0 && c < 1)) return { ok: false, error: 'contamination fraction must be in [0, 1)' };
   const aUpper = c <= accA ? (accA - c) / (1 - c) : 0;
   return {
@@ -279,6 +286,10 @@ export function mcnemarPower(N, pDisc, delta, alpha = 0.05) {
  * is the feasible bound itself.
  */
 export function mde(N, pDisc, alpha = 0.05, target = 0.8) {
+  if (!(Number.isFinite(N) && N > 0) || !(Number.isFinite(pDisc) && pDisc > 0 && pDisc <= 1)
+    || !(Number.isFinite(alpha) && alpha > 0 && alpha < 1) || !(Number.isFinite(target) && target > 0 && target < 1)) {
+    return { ok: false, error: 'bad power settings' };
+  }
   const bound = Math.min(pDisc, 2 - pDisc);
   if (!(bound > 0) || mcnemarPower(N, pDisc, bound, alpha) < target) {
     return { ok: true, delta: bound, reached: false, target };

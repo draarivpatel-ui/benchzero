@@ -277,7 +277,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   background: #1c2531;
 }
 .tm { background: #0a0f15; padding: 7px 10px 8px; min-width: 0; }
-.tm .k { display: block; font: 600 10.5px var(--sans); color: var(--ink-3); letter-spacing: 0.02em; }
+.tm .k { display: block; font: 600 11px var(--sans); color: var(--ink-3); letter-spacing: 0.02em; }
 .tm .v {
   display: block;
   font-family: var(--seg);
@@ -300,7 +300,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .insp-title strong { font: 700 15px var(--mono); color: var(--ch1); }
 .insp-title span { color: var(--ink-3); font-size: 12.5px; }
 .field { display: grid; gap: 5px; }
-.field > span { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.field > span { font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .field-row { display: grid; grid-template-columns: 9ch 1fr; gap: 8px; align-items: center; }
 .si, .insp select, .timebase select {
   background: #0a0f15; border: 1px solid var(--bezel); border-radius: 7px;
@@ -314,9 +314,9 @@ input[type='range'] { width: 100%; accent-color: var(--ch1); }
 .btn-danger { border-color: rgba(248, 113, 113, 0.45); color: #fecaca; }
 .timebase { margin: 0 12px 12px; border-top: 1px solid var(--bezel); padding-top: 8px; }
 .timebase summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
-.tb-note { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.4; }
+.tb-note { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); line-height: 1.4; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-.grid2 label { display: grid; gap: 4px; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.grid2 label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-3); font-weight: 600; }
 
 /* ---------------- verify ---------------- */
 .verify-body { padding: 0 12px 12px; display: grid; gap: 10px; }
@@ -405,14 +405,14 @@ kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 4px; border: 
 .st-svg .curve.d3 { stroke: var(--ch1); }
 .st-svg .dot.d3 { fill: var(--ch1); }
 .st-svg .marker { stroke: var(--math); stroke-width: 1; stroke-dasharray: 3 4; }
-.st-svg text { fill: var(--ink-3); font: 600 10px var(--mono); }
+.st-svg text { fill: var(--ink-3); font: 600 11px var(--mono); }
 .st-svg text.mk { fill: var(--math); }
-.st-svg text.leg { font-size: 10.5px; }
+.st-svg text.leg { font-size: 11px; }
 .st-svg text.leg.d1 { fill: var(--bad); }
 .st-svg text.leg.d2 { fill: var(--ch2); }
 .st-svg text.leg.d3 { fill: var(--ch1); }
 .st-ctl { padding: 4px 12px 12px; display: grid; gap: 8px; }
-.st-ctl label { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; align-items: center; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.st-ctl label { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; align-items: center; font-size: 12px; color: var(--ink-3); font-weight: 600; }
 .st-ctl label .st-read { grid-column: 2; }
 .st-read { font: 600 12px var(--mono); color: var(--ink-2); }
 .st-read.pass { color: var(--theory); }
