@@ -40,7 +40,7 @@ export function parseRows(text, { maxItems = MAX_ITEMS } = {}) {
     const b = Number(fields[fields.length - 1]);
     if (!Number.isFinite(a) || !Number.isFinite(b)) { skipped.push(i + 1); continue; }
     const id = fields.length > 2 ? fields.slice(0, -2).join(' ') : `i${rows.length + 1}`;
-    rows.push({ id: id.slice(0, 60), a, b });
+    rows.push({ id: Array.from(id).slice(0, 60).join(''), a, b });
     if (rows.length > maxItems) return { ok: false, error: `more than ${maxItems} items` };
   }
   if (rows.length === 0) return { ok: false, error: 'no usable rows', skipped };
@@ -184,7 +184,10 @@ export function replayReport(report, { compare = true } = {}) {
  */
 export function csvCell(v) {
   let s = v === null || v === undefined ? '' : String(v);
-  if (/^[=+\-@\t\r ]/.test(s)) s = `'${s}`;
+  const lead = (/^[\s\p{Cf}\p{Cc}]*/u.exec(s) || [''])[0];
+  const first = s.charAt(lead.length);
+  const plainNumber = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s.slice(lead.length));
+  if (lead.length > 0 || (first !== '' && '=+-@'.indexOf(first) !== -1 && !(first === '-' && plainNumber))) s = `'${s}`;
   if (/[",\n\r]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -363,7 +366,7 @@ export const SELF_TESTS = [
   ['CSV escaping neutralises formula cells', () => {
     return csvCell('=cmd|x') === "'=cmd|x"
       && csvCell('@SUM(1)') === "'@SUM(1)"
-      && csvCell('-5') === "'-5"
+      && csvCell('-5') === '-5'
       && csvCell('a,b') === '"a,b"'
       && csvCell('say "hi"') === '"say ""hi"""';
   }],

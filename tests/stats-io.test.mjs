@@ -295,7 +295,7 @@ test('report: a different seed changes the digest', () => {
 test('csvCell: formula-start characters get the quote prefix', () => {
   assert.equal(csvCell('=SUM(A1)'), "'=SUM(A1)");
   assert.equal(csvCell('+cmd'), "'+cmd");
-  assert.equal(csvCell('-5'), "'-5");
+  assert.equal(csvCell('-5'), '-5');
   assert.equal(csvCell('@mention'), "'@mention");
 });
 

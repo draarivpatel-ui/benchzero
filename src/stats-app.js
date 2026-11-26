@@ -471,10 +471,10 @@ function wire() {
   });
   $('#st-sname').addEventListener('input', () => {
     const s = state.suites[state.active];
-    if (s) { s.name = $('#st-sname').value.slice(0, 60) || 'suite'; renderTabs(); queue(); }
+    if (s) { s.name = Array.from($('#st-sname').value).slice(0, 60).join('') || 'suite'; renderTabs(); queue(); }
   });
-  $('#st-model-a').addEventListener('input', () => { state.models[0] = $('#st-model-a').value.slice(0, 60) || 'Model A'; queue(); });
-  $('#st-model-b').addEventListener('input', () => { state.models[1] = $('#st-model-b').value.slice(0, 60) || 'Model B'; queue(); });
+  $('#st-model-a').addEventListener('input', () => { state.models[0] = Array.from($('#st-model-a').value).slice(0, 60).join('') || 'Model A'; queue(); });
+  $('#st-model-b').addEventListener('input', () => { state.models[1] = Array.from($('#st-model-b').value).slice(0, 60).join('') || 'Model B'; queue(); });
   $('#st-seed').addEventListener('input', () => {
     const v = Number($('#st-seed').value);
     if (Number.isInteger(v) && v >= 0 && v <= 0xffffffff) { state.seed = v; queue(); }
